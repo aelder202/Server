@@ -16,11 +16,26 @@ const repos = {
 };
 
 function getRepoUrl(repo) {
-    return config.repos?.[repo] ?? `${repoOrg}/${repos[repo]}`;
+    const source = config.repos?.[repo];
+    if (typeof source === 'string') {
+        return source;
+    }
+    if (source && typeof source === 'object' && typeof source.url === 'string') {
+        return source.url;
+    }
+    return `${repoOrg}/${repos[repo]}`;
+}
+
+function getRepoBranch(repo, branch) {
+    const source = config.repos?.[repo];
+    if (source && typeof source === 'object' && typeof source.branch === 'string') {
+        return source.branch;
+    }
+    return branch;
 }
 
 function cloneRepo(repo, dir, branch) {
-    child_process.execSync(`git clone ${getRepoUrl(repo)} --single-branch -b ${branch} ${dir}`, {
+    child_process.execFileSync('git', ['clone', getRepoUrl(repo), '--single-branch', '-b', getRepoBranch(repo, branch), dir], {
         stdio: 'inherit'
     });
 }

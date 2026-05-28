@@ -1,7 +1,13 @@
 {
   "rev": "254",
   "repos": {
-    "engine": "https://github.com/aelder202/Engine-TS",
-    "webclient": "https://github.com/aelder202/Client-TS"
+    "engine": {
+      "url": "https://github.com/aelder202/Server.git",
+      "branch": "engine-254"
+    },
+    "webclient": {
+      "url": "https://github.com/aelder202/Server.git",
+      "branch": "webclient-254"
+    }
   }
 }
