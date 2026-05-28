@@ -35,6 +35,12 @@ const DECORXOF = Int8Array.of(53, -53, -53, 53);
 const DECORZOF = Int8Array.of(-53, -53, 53, 53);
 const DECORXOF2 = Int8Array.of(-45, 45, 45, -45);
 const DECORZOF2 = Int8Array.of(45, 45, -45, -45);
+const RENDER_DISTANCE = 50;
+const VISIBILITY_MAP_SIZE = RENDER_DISTANCE * 2 + 1;
+const VISIBILITY_EDGE = RENDER_DISTANCE * 2;
+const VISIBILITY_TEMP_RADIUS = RENDER_DISTANCE + 1;
+const VISIBILITY_TEMP_SIZE = VISIBILITY_TEMP_RADIUS * 2 + 1;
+const FAR_PLANE = RENDER_DISTANCE * 128 + 512;
 
 // prettier-ignore
 const MINIMAP_SHAPE = [
@@ -112,7 +118,7 @@ export default class World {
     static groundX: number = -1;
     static groundZ: number = -1;
 
-    private static visibilityMatrix: boolean[][][][] = new TypedArray4d(8, 32, 51, 51, false);
+    private static visibilityMatrix: boolean[][][][] = new TypedArray4d(8, 32, VISIBILITY_MAP_SIZE, VISIBILITY_MAP_SIZE, false);
     private static visibilityMap: boolean[][] | null = null;
 
     static activeOccluderCount: number = 0;
@@ -927,7 +933,7 @@ export default class World {
         this.viewportCentreX = (viewportWidth / 2) | 0;
         this.viewportCentreY = (viewportHeight / 2) | 0;
 
-        const matrix: boolean[][][][] = new TypedArray4d(9, 32, 53, 53, false);
+        const matrix: boolean[][][][] = new TypedArray4d(9, 32, VISIBILITY_TEMP_SIZE, VISIBILITY_TEMP_SIZE, false);
         for (let pitch: number = 128; pitch <= 384; pitch += 32) {
             for (let yaw: number = 0; yaw < 2048; yaw += 64) {
                 this.cameraSinX = Pix3D.sinTable[pitch];
@@ -937,8 +943,8 @@ export default class World {
 
                 const pitchLevel: number = ((pitch - 128) / 32) | 0;
                 const yawLevel: number = (yaw / 64) | 0;
-                for (let dx: number = -26; dx <= 26; dx++) {
-                    for (let dz: number = -26; dz <= 26; dz++) {
+                for (let dx: number = -VISIBILITY_TEMP_RADIUS; dx <= VISIBILITY_TEMP_RADIUS; dx++) {
+                    for (let dz: number = -VISIBILITY_TEMP_RADIUS; dz <= VISIBILITY_TEMP_RADIUS; dz++) {
                         const x: number = dx * 128;
                         const z: number = dz * 128;
 
@@ -950,7 +956,7 @@ export default class World {
                             }
                         }
 
-                        matrix[pitchLevel][yawLevel][dx + 25 + 1][dz + 25 + 1] = visible;
+                        matrix[pitchLevel][yawLevel][dx + RENDER_DISTANCE + 1][dz + RENDER_DISTANCE + 1] = visible;
                     }
                 }
             }
@@ -958,33 +964,33 @@ export default class World {
 
         for (let pitchLevel: number = 0; pitchLevel < 8; pitchLevel++) {
             for (let yawLevel: number = 0; yawLevel < 32; yawLevel++) {
-                for (let x: number = -25; x < 25; x++) {
-                    for (let z: number = -25; z < 25; z++) {
+                for (let x: number = -RENDER_DISTANCE; x < RENDER_DISTANCE; x++) {
+                    for (let z: number = -RENDER_DISTANCE; z < RENDER_DISTANCE; z++) {
                         let visible: boolean = false;
                         check_areas: for (let dx: number = -1; dx <= 1; dx++) {
                             for (let dz: number = -1; dz <= 1; dz++) {
-                                if (matrix[pitchLevel][yawLevel][x + dx + 25 + 1][z + dz + 25 + 1]) {
+                                if (matrix[pitchLevel][yawLevel][x + dx + RENDER_DISTANCE + 1][z + dz + RENDER_DISTANCE + 1]) {
                                     visible = true;
                                     break check_areas;
                                 }
 
-                                if (matrix[pitchLevel][(yawLevel + 1) % 31][x + dx + 25 + 1][z + dz + 25 + 1]) {
+                                if (matrix[pitchLevel][(yawLevel + 1) % 32][x + dx + RENDER_DISTANCE + 1][z + dz + RENDER_DISTANCE + 1]) {
                                     visible = true;
                                     break check_areas;
                                 }
 
-                                if (matrix[pitchLevel + 1][yawLevel][x + dx + 25 + 1][z + dz + 25 + 1]) {
+                                if (matrix[pitchLevel + 1][yawLevel][x + dx + RENDER_DISTANCE + 1][z + dz + RENDER_DISTANCE + 1]) {
                                     visible = true;
                                     break check_areas;
                                 }
 
-                                if (matrix[pitchLevel + 1][(yawLevel + 1) % 31][x + dx + 25 + 1][z + dz + 25 + 1]) {
+                                if (matrix[pitchLevel + 1][(yawLevel + 1) % 32][x + dx + RENDER_DISTANCE + 1][z + dz + RENDER_DISTANCE + 1]) {
                                     visible = true;
                                     break check_areas;
                                 }
                             }
                         }
-                        this.visibilityMatrix[pitchLevel][yawLevel][x + 25][z + 25] = visible;
+                        this.visibilityMatrix[pitchLevel][yawLevel][x + RENDER_DISTANCE][z + RENDER_DISTANCE] = visible;
                     }
                 }
             }
@@ -997,7 +1003,7 @@ export default class World {
         const pz: number = (y * this.cameraSinX + tmp * this.cameraCosX) >> 16;
         const py: number = (y * this.cameraCosX - tmp * this.cameraSinX) >> 16;
 
-        if (pz < 50 || pz > 3500) {
+        if (pz < 50 || pz > FAR_PLANE) {
             return false;
         }
 
@@ -1041,22 +1047,22 @@ export default class World {
         World.gz = (eyeZ / 128) | 0;
         World.maxLevel = maxLevel;
 
-        World.minX = World.gx - 25;
+        World.minX = World.gx - RENDER_DISTANCE;
         if (World.minX < 0) {
             World.minX = 0;
         }
 
-        World.minZ = World.gz - 25;
+        World.minZ = World.gz - RENDER_DISTANCE;
         if (World.minZ < 0) {
             World.minZ = 0;
         }
 
-        World.maxX = World.gx + 25;
+        World.maxX = World.gx + RENDER_DISTANCE;
         if (World.maxX > this.maxTileX) {
             World.maxX = this.maxTileX;
         }
 
-        World.maxZ = World.gz + 25;
+        World.maxZ = World.gz + RENDER_DISTANCE;
         if (World.maxZ > this.maxTileZ) {
             World.maxZ = this.maxTileZ;
         }
@@ -1073,7 +1079,7 @@ export default class World {
                         continue;
                     }
 
-                    if (tile.drawLevel <= maxLevel && (World.visibilityMap[x + 25 - World.gx][z + 25 - World.gz] || this.groundh[level][x][z] - eyeY >= 2000)) {
+                    if (tile.drawLevel <= maxLevel && (World.visibilityMap[x + RENDER_DISTANCE - World.gx][z + RENDER_DISTANCE - World.gz] || this.groundh[level][x][z] - eyeY >= 2000)) {
                         tile.drawFront = true;
                         tile.drawBack = true;
                         tile.drawSprites = tile.spriteCount > 0;
@@ -1089,7 +1095,7 @@ export default class World {
 
         for (let level: number = this.minLevel; level < this.maxTileLevel; level++) {
             const tiles: (Square | null)[][] = this.levelTiles[level];
-            for (let dx: number = -25; dx <= 0; dx++) {
+            for (let dx: number = -RENDER_DISTANCE; dx <= 0; dx++) {
                 const rightTileX: number = World.gx + dx;
                 const leftTileX: number = World.gx - dx;
 
@@ -1097,7 +1103,7 @@ export default class World {
                     continue;
                 }
 
-                for (let dz: number = -25; dz <= 0; dz++) {
+                for (let dz: number = -RENDER_DISTANCE; dz <= 0; dz++) {
                     const forwardTileZ: number = World.gz + dz;
                     const backwardTileZ: number = World.gz - dz;
                     let tile: Square | null;
@@ -1144,7 +1150,7 @@ export default class World {
 
         for (let level: number = this.minLevel; level < this.maxTileLevel; level++) {
             const tiles: (Square | null)[][] = this.levelTiles[level];
-            for (let dx: number = -25; dx <= 0; dx++) {
+            for (let dx: number = -RENDER_DISTANCE; dx <= 0; dx++) {
                 const rightTileX: number = World.gx + dx;
                 const leftTileX: number = World.gx - dx;
 
@@ -1152,7 +1158,7 @@ export default class World {
                     continue;
                 }
 
-                for (let dz: number = -25; dz <= 0; dz++) {
+                for (let dz: number = -RENDER_DISTANCE; dz <= 0; dz++) {
                     const forwardTileZ: number = World.gz + dz;
                     const backgroundTileZ: number = World.gz - dz;
                     let tile: Square | null;
@@ -1317,16 +1323,16 @@ export default class World {
             let deltaMaxTileX: number;
 
             if (occluder.type === 1) {
-                deltaMaxY = occluder.minTileX + 25 - World.gx;
-                if (deltaMaxY >= 0 && deltaMaxY <= 50) {
-                    deltaMinTileZ = occluder.minTileZ + 25 - World.gz;
+                deltaMaxY = occluder.minTileX + RENDER_DISTANCE - World.gx;
+                if (deltaMaxY >= 0 && deltaMaxY <= VISIBILITY_EDGE) {
+                    deltaMinTileZ = occluder.minTileZ + RENDER_DISTANCE - World.gz;
                     if (deltaMinTileZ < 0) {
                         deltaMinTileZ = 0;
                     }
 
-                    deltaMaxTileZ = occluder.maxTileZ + 25 - World.gz;
-                    if (deltaMaxTileZ > 50) {
-                        deltaMaxTileZ = 50;
+                    deltaMaxTileZ = occluder.maxTileZ + RENDER_DISTANCE - World.gz;
+                    if (deltaMaxTileZ > VISIBILITY_EDGE) {
+                        deltaMaxTileZ = VISIBILITY_EDGE;
                     }
 
                     let ok: boolean = false;
@@ -1358,17 +1364,17 @@ export default class World {
                     }
                 }
             } else if (occluder.type === 2) {
-                deltaMaxY = occluder.minTileZ + 25 - World.gz;
+                deltaMaxY = occluder.minTileZ + RENDER_DISTANCE - World.gz;
 
-                if (deltaMaxY >= 0 && deltaMaxY <= 50) {
-                    deltaMinTileZ = occluder.minTileX + 25 - World.gx;
+                if (deltaMaxY >= 0 && deltaMaxY <= VISIBILITY_EDGE) {
+                    deltaMinTileZ = occluder.minTileX + RENDER_DISTANCE - World.gx;
                     if (deltaMinTileZ < 0) {
                         deltaMinTileZ = 0;
                     }
 
-                    deltaMaxTileZ = occluder.maxTileX + 25 - World.gx;
-                    if (deltaMaxTileZ > 50) {
-                        deltaMaxTileZ = 50;
+                    deltaMaxTileZ = occluder.maxTileX + RENDER_DISTANCE - World.gx;
+                    if (deltaMaxTileZ > VISIBILITY_EDGE) {
+                        deltaMaxTileZ = VISIBILITY_EDGE;
                     }
 
                     let ok: boolean = false;
@@ -1403,25 +1409,25 @@ export default class World {
                 deltaMaxY = occluder.minY - World.cy;
 
                 if (deltaMaxY > 128) {
-                    deltaMinTileZ = occluder.minTileZ + 25 - World.gz;
+                    deltaMinTileZ = occluder.minTileZ + RENDER_DISTANCE - World.gz;
                     if (deltaMinTileZ < 0) {
                         deltaMinTileZ = 0;
                     }
 
-                    deltaMaxTileZ = occluder.maxTileZ + 25 - World.gz;
-                    if (deltaMaxTileZ > 50) {
-                        deltaMaxTileZ = 50;
+                    deltaMaxTileZ = occluder.maxTileZ + RENDER_DISTANCE - World.gz;
+                    if (deltaMaxTileZ > VISIBILITY_EDGE) {
+                        deltaMaxTileZ = VISIBILITY_EDGE;
                     }
 
                     if (deltaMinTileZ <= deltaMaxTileZ) {
-                        let deltaMinTileX: number = occluder.minTileX + 25 - World.gx;
+                        let deltaMinTileX: number = occluder.minTileX + RENDER_DISTANCE - World.gx;
                         if (deltaMinTileX < 0) {
                             deltaMinTileX = 0;
                         }
 
-                        deltaMaxTileX = occluder.maxTileX + 25 - World.gx;
-                        if (deltaMaxTileX > 50) {
-                            deltaMaxTileX = 50;
+                        deltaMaxTileX = occluder.maxTileX + RENDER_DISTANCE - World.gx;
+                        if (deltaMaxTileX > VISIBILITY_EDGE) {
+                            deltaMaxTileX = VISIBILITY_EDGE;
                         }
 
                         let ok: boolean = false;

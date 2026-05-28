@@ -97,6 +97,7 @@ export default abstract class GameShell {
         canvas.onpointerenter = this.onpointerenter.bind(this);
         canvas.onpointerleave = this.onpointerleave.bind(this);
         canvas.onpointermove = this.onpointermove.bind(this);
+        canvas.onwheel = this.onwheel.bind(this);
         window.onmouseup = this.windowMouseUp.bind(this);
         window.onmousemove = this.windowMouseMove.bind(this);
 
@@ -419,10 +420,19 @@ export default abstract class GameShell {
         }
     }
 
-    protected windowMouseUp(e: MouseEvent) {
+    protected windowMouseUp(_e: MouseEvent) {
     }
 
-    protected windowMouseMove(e: MouseEvent) {
+    protected windowMouseMove(_e: MouseEvent) {
+    }
+
+    private onwheel(e: WheelEvent) {
+        const { x, y } = this.getMousePos(e);
+
+        this.mouseWheel(x, y, e);
+    }
+
+    protected mouseWheel(_x: number, _y: number, _e: WheelEvent) {
     }
 
     private ontouchstart(e: TouchEvent) {
@@ -454,6 +464,15 @@ export default abstract class GameShell {
                 ch -= 'a'.charCodeAt(0) - 1;
             }
         }
+
+        const mapped: number | null = this.remapKeyDown(ch, e);
+        if (mapped === null) {
+            if (!CanvasEnabledKeys.includes(e.key)) {
+                e.preventDefault();
+            }
+            return;
+        }
+        ch = mapped;
 
         if (ch > 0 && ch < 128) {
             this.keyHeld[ch] = 1;
@@ -497,6 +516,15 @@ export default abstract class GameShell {
             }
         }
 
+        const mapped: number | null = this.remapKeyUp(ch, e);
+        if (mapped === null) {
+            if (!CanvasEnabledKeys.includes(e.key)) {
+                e.preventDefault();
+            }
+            return;
+        }
+        ch = mapped;
+
         if (ch > 0 && ch < 128) {
             this.keyHeld[ch] = 0;
         }
@@ -517,6 +545,14 @@ export default abstract class GameShell {
             this.keyQueueReadPos = (this.keyQueueReadPos + 1) & 0x7f;
         }
         return key;
+    }
+
+    protected remapKeyDown(ch: number, _event: KeyboardEvent): number | null {
+        return ch;
+    }
+
+    protected remapKeyUp(ch: number, _event: KeyboardEvent): number | null {
+        return ch;
     }
 
     private onfocus(_e: FocusEvent) {
