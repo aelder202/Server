@@ -98,4 +98,6 @@ Do not commit generated dependencies, local runtime state, or local secrets:
 - `webclient/out/`
 - `*.map` build artifacts unless there is an explicit reason
 
+Portable character save snapshots are tracked at the root under `saves/players/`. Commit those snapshot files when character progress should move to another PC. Do not commit the live `engine/data/players/` runtime folder.
+
 Always check status in the root, `engine`, and `webclient` before finishing.

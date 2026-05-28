@@ -21,6 +21,12 @@ Once your setup process has completed, wait for it to tell you the world has sta
 
 You can press `ctrl + c` to cancel/quit out of a terminal process.
 
+## Character Saves
+
+This fork keeps portable character saves in `saves/players/` so they can move with the launcher repo. On first startup, `start.js` restores that snapshot into `engine/data/players/` if the engine save folder is empty. When the server stops, `start.js` refreshes `saves/players/` from the live engine saves.
+
+After playing, commit and push changes under `saves/players/` if you want those character saves to appear on another PC.
+
 ## Dependencies
 
 - Git CLI - Windows users: [git-scm](https://git-scm.com/)

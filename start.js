@@ -2,6 +2,7 @@
 
 const child_process = require('child_process');
 const fs = require('fs');
+const path = require('path');
 
 const { ExitPromptError } = require('@inquirer/core');
 const { select } = require('@inquirer/prompts');
@@ -14,6 +15,62 @@ const repos = {
     webclient: 'Client-TS',
     javaclient: 'Client-Java'
 };
+
+const playerSaveSnapshotDir = path.join('saves', 'players');
+const enginePlayerSaveDir = path.join('engine', 'data', 'players');
+
+function hasAnyFile(dir) {
+    if (!fs.existsSync(dir)) {
+        return false;
+    }
+
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const entryPath = path.join(dir, entry.name);
+
+        if (entry.isDirectory()) {
+            if (hasAnyFile(entryPath)) {
+                return true;
+            }
+        } else {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function copyDirectory(source, destination, mirror = false) {
+    if (!fs.existsSync(source)) {
+        return false;
+    }
+
+    if (mirror && fs.existsSync(destination)) {
+        fs.rmSync(destination, { recursive: true, force: true });
+    }
+
+    fs.mkdirSync(destination, { recursive: true });
+    fs.cpSync(source, destination, { recursive: true, force: true });
+    return true;
+}
+
+function restorePlayerSaves() {
+    if (!hasAnyFile(playerSaveSnapshotDir) || hasAnyFile(enginePlayerSaveDir)) {
+        return;
+    }
+
+    copyDirectory(playerSaveSnapshotDir, enginePlayerSaveDir);
+    console.log('Restored character saves from saves/players.');
+}
+
+function backupPlayerSaves() {
+    if (!hasAnyFile(enginePlayerSaveDir)) {
+        console.log('No character saves found to back up.');
+        return;
+    }
+
+    copyDirectory(enginePlayerSaveDir, playerSaveSnapshotDir, true);
+    console.log('Backed up character saves to saves/players. Commit and push these files to carry them to another PC.');
+}
 
 function getRepoUrl(repo) {
     const source = config.repos?.[repo];
@@ -67,10 +124,15 @@ function ensureEngineDependencies() {
 
 function startEngine() {
     ensureEngineDependencies();
-    child_process.execSync('bun run src/app.ts', {
-        stdio: 'inherit',
-        cwd: 'engine'
-    });
+
+    try {
+        child_process.execSync('bun run src/app.ts', {
+            stdio: 'inherit',
+            cwd: 'engine'
+        });
+    } finally {
+        backupPlayerSaves();
+    }
 }
 
 let config = {
@@ -143,6 +205,8 @@ async function main() {
         });
     }
 
+    restorePlayerSaves();
+
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
         console.log('No interactive terminal detected; starting the server directly.');
         startEngine();
@@ -160,6 +224,10 @@ async function main() {
             name: 'Update Source',
             description: 'Pull the latest commits for all subprojects',
             value: 'update'
+        }, {
+            name: 'Backup Character Saves',
+            description: 'Copies local player saves into the tracked saves/players snapshot',
+            value: 'backup-saves'
         },
         revInfo[config.rev]?.webclient ? {
             name: 'Run Web Client',
@@ -192,6 +260,8 @@ async function main() {
         updateRepo('content');
         updateRepo('webclient');
         updateRepo('javaclient');
+    } else if (choice === 'backup-saves') {
+        backupPlayerSaves();
     } else if (choice === 'web') {
         if (!revInfo[config.rev]?.webclient) {
             console.log('This version does not have a webclient available (yet?), sorry.');
