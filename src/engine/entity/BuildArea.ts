@@ -4,6 +4,11 @@ import World from '#/engine/World.js';
 import ZoneMap from '#/engine/zone/ZoneMap.js';
 import RebuildNormal from '#/network/game/server/model/RebuildNormal.js';
 
+export const BUILD_AREA_RADIUS_ZONES = 6;
+export const BUILD_AREA_SIZE = (BUILD_AREA_RADIUS_ZONES * 2 + 1) << 3;
+const BUILD_AREA_REBUILD_RADIUS_ZONES = 4;
+const ACTIVE_ZONE_RADIUS = 3;
+
 export default class BuildArea {
     // constructor
     readonly player: Player;
@@ -38,13 +43,13 @@ export default class BuildArea {
         const originX: number = CoordGrid.zone(this.player.originX);
         const originZ: number = CoordGrid.zone(this.player.originZ);
 
-        const leftX = originX - 6;
-        const rightX = originX + 6;
-        const topZ = originZ + 6;
-        const bottomZ = originZ - 6;
+        const leftX = originX - BUILD_AREA_RADIUS_ZONES;
+        const rightX = originX + BUILD_AREA_RADIUS_ZONES;
+        const topZ = originZ + BUILD_AREA_RADIUS_ZONES;
+        const bottomZ = originZ - BUILD_AREA_RADIUS_ZONES;
 
-        for (let x = centerX - 3; x <= centerX + 3; x++) {
-            for (let z = centerZ - 3; z <= centerZ + 3; z++) {
+        for (let x = centerX - ACTIVE_ZONE_RADIUS; x <= centerX + ACTIVE_ZONE_RADIUS; x++) {
+            for (let z = centerZ - ACTIVE_ZONE_RADIUS; z <= centerZ + ACTIVE_ZONE_RADIUS; z++) {
                 // check if the zone is within the build area
                 if (x < leftX || x > rightX || z > topZ || z < bottomZ) {
                     continue;
@@ -58,10 +63,10 @@ export default class BuildArea {
         const originX: number = CoordGrid.zone(this.player.originX);
         const originZ: number = CoordGrid.zone(this.player.originZ);
 
-        const reloadLeftX = (originX - 4) << 3;
-        const reloadRightX = (originX + 5) << 3;
-        const reloadTopZ = (originZ + 5) << 3;
-        const reloadBottomZ = (originZ - 4) << 3;
+        const reloadLeftX = (originX - BUILD_AREA_REBUILD_RADIUS_ZONES) << 3;
+        const reloadRightX = (originX + BUILD_AREA_REBUILD_RADIUS_ZONES + 1) << 3;
+        const reloadTopZ = (originZ + BUILD_AREA_REBUILD_RADIUS_ZONES + 1) << 3;
+        const reloadBottomZ = (originZ - BUILD_AREA_REBUILD_RADIUS_ZONES) << 3;
 
         // if the build area should be regenerated, do so now
         if (this.player.x < reloadLeftX || this.player.z < reloadBottomZ || this.player.x > reloadRightX - 1 || this.player.z > reloadTopZ - 1 || reconnect) {
@@ -69,10 +74,10 @@ export default class BuildArea {
             const zoneZ: number = CoordGrid.zone(this.player.z);
 
             this.mapsquares.clear();
-            const minX: number = zoneX - 6;
-            const maxX: number = zoneX + 6;
-            const minZ: number = zoneZ - 6;
-            const maxZ: number = zoneZ + 6;
+            const minX: number = zoneX - BUILD_AREA_RADIUS_ZONES;
+            const maxX: number = zoneX + BUILD_AREA_RADIUS_ZONES;
+            const minZ: number = zoneZ - BUILD_AREA_RADIUS_ZONES;
+            const maxZ: number = zoneZ + BUILD_AREA_RADIUS_ZONES;
 
             // build area is 13x13 zones (8*13 = 104 tiles), so we need to load 6 zones in each direction
             for (let x: number = minX; x <= maxX; x++) {

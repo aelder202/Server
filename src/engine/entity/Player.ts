@@ -292,6 +292,8 @@ export default class Player extends PathingEntity {
     tempRun: number = 0;
     runenergy: number = 10000;
     lastRunEnergy: number = -1;
+    infiniteRunEnergy: boolean = false;
+    godMode: boolean = false;
     runweight: number = 0;
     playtime: number = 0;
     stats: Int32Array = new Int32Array(21);
@@ -705,19 +707,19 @@ export default class Player extends PathingEntity {
         if (this.stepsTaken < 2) {
             const recovered = ((this.baseLevels[PlayerStat.AGILITY] / 6) | 0) + 8;
             this.runenergy = Math.min(this.runenergy + recovered, 10000);
-        } else {
+        } else if (!this.infiniteRunEnergy) {
             const weightKg = this.runweight / 1000;
             const clampWeight = Math.min(Math.max(weightKg, 0), 64);
             const loss = (67 + (67 * clampWeight) / 64) | 0;
             this.runenergy = Math.max(this.runenergy - loss, 0);
         }
 
-        if (this.runenergy === 0) {
+        if (!this.infiniteRunEnergy && this.runenergy === 0) {
             this.run = 0;
             // todo: better way to sync engine varp
             this.setVar(VarPlayerType.RUN, this.run);
         }
-        if (this.runenergy < 100) {
+        if (!this.infiniteRunEnergy && this.runenergy < 100) {
             this.tempRun = 0;
         }
     }
@@ -1937,6 +1939,10 @@ export default class Player extends PathingEntity {
     }
 
     applyDamage(damage: number, type: number) {
+        if (this.godMode) {
+            return;
+        }
+
         const current = this.levels[PlayerStat.HITPOINTS];
         if (current - damage <= 0) {
             this.levels[PlayerStat.HITPOINTS] = 0;

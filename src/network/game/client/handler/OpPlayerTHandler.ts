@@ -3,6 +3,7 @@ import * as rsbuf from '#/network/rsbuf/index.js';
 import Component, { ComActionTarget } from '#/cache/config/Component.js';
 import { Interaction } from '#/engine/entity/Interaction.js';
 import { NetworkPlayer } from '#/engine/entity/NetworkPlayer.js';
+import { isSimulatedPlayer } from '#/engine/entity/SimulatedPlayer.js';
 import ServerTriggerType from '#/engine/script/ServerTriggerType.js';
 import World from '#/engine/World.js';
 import ClientGameMessageHandler from '#/network/game/client/ClientGameMessageHandler.js';
@@ -41,6 +42,12 @@ export default class OpPlayerTHandler extends ClientGameMessageHandler<OpPlayerT
             // bad client or lag: player is not visible on client
             player.write(new UnsetMapFlag());
             return false;
+        }
+
+        if (isSimulatedPlayer(other)) {
+            player.messageGame(`${other.displayName} is busy with their own adventure.`);
+            player.write(new UnsetMapFlag());
+            return true;
         }
 
         player.clearPendingAction();

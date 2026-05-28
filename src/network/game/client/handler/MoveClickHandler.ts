@@ -1,5 +1,6 @@
 import { CoordGrid } from '#/engine/CoordGrid.js';
 import { NetworkPlayer } from '#/engine/entity/NetworkPlayer.js';
+import { BUILD_AREA_SIZE } from '#/engine/entity/BuildArea.js';
 import ClientGameMessageHandler from '#/network/game/client/ClientGameMessageHandler.js';
 import MoveClick from '#/network/game/client/model/MoveClick.js';
 import UnsetMapFlag from '#/network/game/server/model/UnsetMapFlag.js';
@@ -17,7 +18,7 @@ export default class MoveClickHandler extends ClientGameMessageHandler<MoveClick
         const start = message.path[0];
 
         // Validate input
-        if (message.ctrlHeld < 0 || message.ctrlHeld > 1 || CoordGrid.distanceToSW(player, { x: start.x, z: start.z }) > 104) {
+        if (message.ctrlHeld < 0 || message.ctrlHeld > 1 || CoordGrid.distanceToSW(player, { x: start.x, z: start.z }) > BUILD_AREA_SIZE) {
             player.unsetMapFlag();
             player.userPath = [];
             return false;
@@ -32,7 +33,7 @@ export default class MoveClickHandler extends ClientGameMessageHandler<MoveClick
         }
 
         // Handle ctrl run
-        if (player.runenergy < 100 && message.ctrlHeld === 1) {
+        if (!player.infiniteRunEnergy && player.runenergy < 100 && message.ctrlHeld === 1) {
             player.tempRun = 0;
         } else {
             player.tempRun = message.ctrlHeld;

@@ -36,6 +36,53 @@ import Environment from '#/util/Environment.js';
 import { printDebug } from '#/util/Logger.js';
 import { tryParseInt } from '#/util/TryParse.js';
 
+type TeleportFavorite = {
+    name: string;
+    level: number;
+    x: number;
+    z: number;
+};
+
+const NORMAL_WORLD_TICKRATE = 600;
+
+const TELEPORT_FAVORITES: Record<string, TeleportFavorite> = {
+    home: { name: 'Lumbridge', level: 0, x: (50 << 6) + 22, z: (50 << 6) + 22 },
+    lumby: { name: 'Lumbridge', level: 0, x: (50 << 6) + 22, z: (50 << 6) + 22 },
+    lumbridge: { name: 'Lumbridge', level: 0, x: (50 << 6) + 22, z: (50 << 6) + 22 },
+    varrock: { name: 'Varrock', level: 0, x: (50 << 6) + 13, z: (53 << 6) + 31 },
+    fally: { name: 'Falador', level: 0, x: (46 << 6) + 21, z: (52 << 6) + 51 },
+    falador: { name: 'Falador', level: 0, x: (46 << 6) + 21, z: (52 << 6) + 51 },
+    draynor: { name: 'Draynor Village', level: 0, x: (48 << 6) + 8, z: (50 << 6) + 50 },
+    portsarim: { name: 'Port Sarim', level: 0, x: (47 << 6) + 19, z: (50 << 6) + 25 },
+    rimmington: { name: 'Rimmington', level: 0, x: (46 << 6) + 12, z: (50 << 6) + 10 },
+    alkharid: { name: 'Al Kharid', level: 0, x: (51 << 6) + 28, z: (49 << 6) + 47 },
+    seers: { name: "Seers' Village", level: 0, x: (42 << 6) + 44, z: (54 << 6) + 29 },
+    camelot: { name: 'Camelot', level: 0, x: (43 << 6) + 28, z: (54 << 6) + 59 },
+    ardy: { name: 'Ardougne', level: 0, x: (41 << 6) + 39, z: (51 << 6) + 38 },
+    ardougne: { name: 'Ardougne', level: 0, x: (41 << 6) + 39, z: (51 << 6) + 38 },
+    entrana: { name: 'Entrana', level: 0, x: (44 << 6) + 11, z: (52 << 6) + 16 },
+    brimhaven: { name: 'Brimhaven', level: 0, x: (43 << 6) + 50, z: (49 << 6) + 41 },
+    duel: { name: 'Duel Arena', level: 0, x: (52 << 6) + 42, z: (51 << 6) + 4 },
+    pvp: { name: 'Wilderness', level: 0, x: (52 << 6) + 37, z: (60 << 6) + 37 }
+};
+
+const TELEPORT_FAVORITE_NAMES = [...new Set(Object.values(TELEPORT_FAVORITES).map(favorite => favorite.name))].join(', ');
+
+function teleportToFavorite(player: Player, favorite: TeleportFavorite): boolean {
+    player.closeModal();
+
+    if (!player.canAccess()) {
+        player.messageGame('Please finish what you are doing first.');
+        return false;
+    }
+
+    player.clearInteraction();
+    player.unsetMapFlag();
+    player.teleJump(favorite.x, favorite.z, favorite.level);
+    player.messageGame(`Teleported to ${favorite.name}.`);
+    return true;
+}
+
 export default class ClientCheatHandler extends ClientGameMessageHandler<ClientCheat> {
     handle(message: ClientCheat, player: Player): boolean {
         if (message.input.length > 80) {
@@ -189,7 +236,64 @@ export default class ClientCheatHandler extends ClientGameMessageHandler<ClientC
         if (player.staffModLevel >= 3) {
             // admin commands (potentially destructive for a live economy)
 
-            if (cmd === 'setvar') {
+            if (cmd === 'xprate') {
+                if (args.length < 1) {
+                    player.messageGame(`Current XP rate is ${Environment.NODE_XPRATE}x. Usage: ::xprate <rate>`);
+                    return true;
+                }
+
+                const rate = tryParseInt(args[0], -1);
+                if (rate < 1 || rate > 1000) {
+                    player.messageGame('Usage: ::xprate <rate> where rate is 1-1000.');
+                    return false;
+                }
+
+                Environment.NODE_XPRATE = rate;
+                World.broadcastMes(`XP rate has been changed to ${rate}x.`);
+            } else if (cmd === 'infrun' || cmd === 'infiniterun') {
+                if (args.length > 0 && args[0] !== 'on' && args[0] !== 'off') {
+                    player.messageGame('Usage: ::infrun [on|off].');
+                    return false;
+                }
+
+                player.infiniteRunEnergy = args.length > 0 ? args[0] === 'on' : !player.infiniteRunEnergy;
+                if (player.infiniteRunEnergy) {
+                    player.runenergy = 10000;
+                    player.lastRunEnergy = -1;
+                }
+                player.messageGame(`Infinite run energy ${player.infiniteRunEnergy ? 'enabled' : 'disabled'}.`);
+            } else if (cmd === 'god' || cmd === 'godmode') {
+                if (args.length > 0 && args[0] !== 'on' && args[0] !== 'off') {
+                    player.messageGame('Usage: ::god [on|off].');
+                    return false;
+                }
+
+                player.godMode = args.length > 0 ? args[0] === 'on' : !player.godMode;
+                if (player.godMode) {
+                    player.levels[PlayerStat.HITPOINTS] = player.baseLevels[PlayerStat.HITPOINTS];
+                }
+                player.messageGame(`God mode ${player.godMode ? 'enabled' : 'disabled'}.`);
+            } else if (cmd === 'runspeed') {
+                if (args.length < 1) {
+                    if (World.tickRate === NORMAL_WORLD_TICKRATE) {
+                        World.tickRate = NORMAL_WORLD_TICKRATE / 2;
+                    } else {
+                        World.tickRate = NORMAL_WORLD_TICKRATE;
+                    }
+                } else if (args[0] === 'off' || args[0] === 'normal') {
+                    World.tickRate = NORMAL_WORLD_TICKRATE;
+                } else {
+                    const multiplier = tryParseInt(args[0], -1);
+                    if (multiplier < 1 || multiplier > 10) {
+                        player.messageGame('Usage: ::runspeed [multiplier|off] where multiplier is 1-10.');
+                        return false;
+                    }
+
+                    World.tickRate = Math.max(20, (NORMAL_WORLD_TICKRATE / multiplier) | 0);
+                }
+
+                player.messageGame(`Run speed is now ${(NORMAL_WORLD_TICKRATE / World.tickRate).toFixed(1)}x.`);
+            } else if (cmd === 'setvar') {
                 // authentic
                 if (args.length < 2) {
                     // ::setvar <variable> <value>
@@ -555,6 +659,23 @@ export default class ClientCheatHandler extends ClientGameMessageHandler<ClientC
 
                 // Displays current coordinate
                 player.messageGame(CoordGrid.formatString(player.level, player.x, player.z, ','));
+            } else if (cmd === 'teles') {
+                player.messageGame(`Teleport favorites: ${TELEPORT_FAVORITE_NAMES}.`);
+            } else if (cmd === 'telefav' || cmd === 'tp') {
+                if (args.length < 1) {
+                    player.messageGame(`Usage: ::${cmd} <name>. Favorites: ${TELEPORT_FAVORITE_NAMES}.`);
+                    return false;
+                }
+
+                const favorite = TELEPORT_FAVORITES[args[0]];
+                if (!favorite) {
+                    player.messageGame(`Unknown teleport favorite '${args[0]}'. Use ::teles for options.`);
+                    return false;
+                }
+
+                return teleportToFavorite(player, favorite);
+            } else if (TELEPORT_FAVORITES[cmd]) {
+                return teleportToFavorite(player, TELEPORT_FAVORITES[cmd]);
             } else if (cmd === 'tele') {
                 // authentic - https://youtu.be/60Y3y375VYA?t=980
                 if (args.length < 1) {
