@@ -41,6 +41,24 @@ export type WebSocketRoutes = {
     '/': Response
 };
 
+function clientCacheResponse(file: number, fallbackPath: string) {
+    const data = OnDemand.cache.read(0, file);
+    if (data) {
+        return new Response(Buffer.from(data));
+    }
+
+    if (fs.existsSync(fallbackPath)) {
+        return new Response(Bun.file(fallbackPath));
+    }
+
+    return new Response(null, {
+        status: 503,
+        headers: {
+            'Retry-After': '1'
+        }
+    });
+}
+
 function resolveContentPath(name: string): string | null {
     let decodedName: string;
     try {
@@ -84,21 +102,21 @@ export async function startWeb() {
                 } else if (url.pathname.startsWith('/crc')) {
                     return new Response(Buffer.from(CrcBuffer.data));
                 } else if (url.pathname.startsWith('/title')) {
-                    return new Response(Buffer.from(OnDemand.cache.read(0, 1)!));
+                    return clientCacheResponse(1, 'data/pack/client/title');
                 } else if (url.pathname.startsWith('/config')) {
-                    return new Response(Buffer.from(OnDemand.cache.read(0, 2)!));
+                    return clientCacheResponse(2, 'data/pack/client/config');
                 } else if (url.pathname.startsWith('/interface')) {
-                    return new Response(Buffer.from(OnDemand.cache.read(0, 3)!));
+                    return clientCacheResponse(3, 'data/pack/client/interface');
                 } else if (url.pathname.startsWith('/media')) {
-                    return new Response(Buffer.from(OnDemand.cache.read(0, 4)!));
+                    return clientCacheResponse(4, 'data/pack/client/media');
                 } else if (url.pathname.startsWith('/versionlist')) {
-                    return new Response(Buffer.from(OnDemand.cache.read(0, 5)!));
+                    return clientCacheResponse(5, 'data/pack/client/versionlist');
                 } else if (url.pathname.startsWith('/textures')) {
-                    return new Response(Buffer.from(OnDemand.cache.read(0, 6)!));
+                    return clientCacheResponse(6, 'data/pack/client/textures');
                 } else if (url.pathname.startsWith('/wordenc')) {
-                    return new Response(Buffer.from(OnDemand.cache.read(0, 7)!));
+                    return clientCacheResponse(7, 'data/raw/wordenc');
                 } else if (url.pathname.startsWith('/sounds')) {
-                    return new Response(Buffer.from(OnDemand.cache.read(0, 8)!));
+                    return clientCacheResponse(8, 'data/pack/client/sounds');
                 } else if (url.pathname.startsWith('/ondemand.zip')) {
                     return new Response(Bun.file('data/pack/ondemand.zip'));
                 } else if (url.pathname.startsWith('/build')) {
