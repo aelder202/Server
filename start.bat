@@ -12,5 +12,18 @@ if errorlevel 1 (
     exit /b
 )
 
-npm install
+where /q bun
+if errorlevel 1 (
+    if exist "%USERPROFILE%\.bun\bin\bun.exe" (
+        set "PATH=%USERPROFILE%\.bun\bin;%PATH%"
+    ) else (
+        echo You must install Bun to proceed: https://bun.sh
+        exit /b
+    )
+)
+
+call npm install
+if errorlevel 1 exit /b %errorlevel%
+
 node start.js
+if errorlevel 1 exit /b %errorlevel%

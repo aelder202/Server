@@ -35,6 +35,23 @@ function runOnOs(exec, cwd) {
     });
 }
 
+function ensureEngineDependencies() {
+    if (!fs.existsSync('engine/node_modules')) {
+        child_process.execSync('bun install', {
+            stdio: 'inherit',
+            cwd: 'engine'
+        });
+    }
+}
+
+function startEngine() {
+    ensureEngineDependencies();
+    child_process.execSync('bun run src/app.ts', {
+        stdio: 'inherit',
+        cwd: 'engine'
+    });
+}
+
 let config = {
     rev: 'unset'
 };
@@ -105,6 +122,13 @@ async function main() {
         });
     }
 
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+        console.log('No interactive terminal detected; starting the server directly.');
+        startEngine();
+        running = false;
+        return;
+    }
+
     const choice = await select({
         message: 'What would you like to do?',
         choices: [{
@@ -141,10 +165,7 @@ async function main() {
     }, { clearPromptOnDone: true });
 
     if (choice === 'start') {
-        child_process.execSync('bun start', {
-            stdio: 'inherit',
-            cwd: 'engine'
-        });
+        startEngine();
     } else if (choice === 'update') {
         updateRepo('engine');
         updateRepo('content');
@@ -297,11 +318,8 @@ async function run() {
         if (e instanceof ExitPromptError) {
             process.exit(0);
         } else if (e instanceof Error) {
-            if (e.message.startsWith('Command failed:')) {
-                process.exit(0);
-            }
-
-            console.log(e.message);
+            console.error(e.message);
+            process.exit(1);
         }
     }
 }
