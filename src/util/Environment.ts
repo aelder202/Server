@@ -50,6 +50,10 @@ export default {
     NODE_MAX_PLAYERS: tryParseInt(process.env.NODE_MAX_PLAYERS, 2047),
     NODE_MAX_CONNECTED: tryParseInt(process.env.NODE_MAX_CONNECTED, 1000),
     NODE_MAX_NPCS: tryParseInt(process.env.NODE_MAX_NPCS, 16383),
+    NODE_LIVING_WORLD: tryParseBoolean(process.env.NODE_LIVING_WORLD, true),
+    NODE_LIVING_WORLD_MAX_BOTS: tryParseInt(process.env.NODE_LIVING_WORLD_MAX_BOTS, 50),
+    NODE_LIVING_WORLD_RADIUS: tryParseInt(process.env.NODE_LIVING_WORLD_RADIUS, 192),
+    NODE_LIVING_WORLD_PROFILE_DIR: tryParseString(process.env.NODE_LIVING_WORLD_PROFILE_DIR, 'data/living-world'),
     NODE_DEBUGPROC_CHAR: tryParseString(process.env.NODE_DEBUGPROC_CHAR, '~'),
     NODE_WS_ONDEMAND: tryParseBoolean(process.env.NODE_WS_ONDEMAND, false),
     NODE_HOP_TIME: tryParseInt(process.env.NODE_MAX_NPCS, 45000), // 45s

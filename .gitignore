@@ -10,6 +10,7 @@ data/unpack/
 data/players/
 data/sessions/
 data/symbols/
+data/living-world/
 
 data/config/worlds.json
 data/config/login.json

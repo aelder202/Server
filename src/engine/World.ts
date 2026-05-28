@@ -49,10 +49,12 @@ import Player from '#/engine/entity/Player.js';
 import { PlayerLoading } from '#/engine/entity/PlayerLoading.js';
 import { EntityQueueState, PlayerQueueType } from '#/engine/entity/PlayerQueueRequest.js';
 import { PlayerStat } from '#/engine/entity/PlayerStat.js';
+import SimulatedPlayer, { isSimulatedPlayer } from '#/engine/entity/SimulatedPlayer.js';
 import { SessionLog } from '#/engine/entity/tracking/SessionLog.js';
 import { WealthTransactionEvent, WealthEvent } from '#/engine/entity/tracking/WealthEvent.js';
 import GameMap, { changeLocCollision, changeNpcCollision, changePlayerCollision } from '#/engine/GameMap.js';
 import { Inventory } from '#/engine/Inventory.js';
+import WorldLifeDirector from '#/engine/living/WorldLifeDirector.js';
 import ScriptPointer from '#/engine/script/ScriptPointer.js';
 import ScriptProvider from '#/engine/script/ScriptProvider.js';
 import ScriptRunner from '#/engine/script/ScriptRunner.js';
@@ -148,6 +150,7 @@ class World {
     readonly players: Player[] = new Array(2048);
 
     readonly npcs: NpcList = new NpcList(World.NPCS);
+    readonly lifeDirector: WorldLifeDirector;
 
     // zones
     readonly zonesTracking: Set<Zone> = new Set();
@@ -177,6 +180,8 @@ class World {
     loginDeviceAttempts: TTLCache<string, number> = new TTLCache({ ttl: 15000 });
 
     constructor() {
+        this.lifeDirector = new WorldLifeDirector(this);
+
         this.loginThread.on('message', msg => {
             try {
                 this.onLoginMessage(msg);
@@ -352,6 +357,11 @@ class World {
             // - client input tracking
             this.processClientsIn();
 
+            // local single-player ambience
+            // - simulated player population
+            // - bot activity decisions
+            this.lifeDirector.tick();
+
             // Spawn triggers, despawn triggers
             this.processNpcEventQueue();
 
@@ -427,6 +437,10 @@ class World {
 
             if (tick % World.PLAYER_COORDLOGRATE === 0 && tick > 0) {
                 for (const player of this.playerLoop.all()) {
+                    if (isSimulatedPlayer(player)) {
+                        continue;
+                    }
+
                     player.addSessionLog(LoggerEventType.MODERATOR, 'Server check in');
                 }
             }
@@ -732,6 +746,10 @@ class World {
         const start: number = Date.now();
 
         for (const player of this.playerLoop.all()) {
+            if (isSimulatedPlayer(player)) {
+                continue;
+            }
+
             let force = false;
             if (this.shutdown || this.currentTick - player.lastResponse >= World.TIMEOUT_NO_RESPONSE) {
                 // world shutdown or x-logged / timed out for 60s: force logout
@@ -1185,6 +1203,8 @@ class World {
     }
 
     private processShutdown(): void {
+        this.lifeDirector.setEnabled(false);
+
         for (const player of this.playerLoop.all()) {
             if (isClientConnected(player)) {
                 player.logout();
@@ -1216,6 +1236,10 @@ class World {
 
     private savePlayers(): void {
         for (const player of this.playerLoop.all()) {
+            if (isSimulatedPlayer(player)) {
+                continue;
+            }
+
             this.loginThread.postMessage({
                 type: 'player_autosave',
                 username: player.username,
@@ -1574,6 +1598,11 @@ class World {
     }
 
     removePlayer(player: Player): void {
+        if (isSimulatedPlayer(player)) {
+            this.removeSimulatedPlayer(player);
+            return;
+        }
+
         if (player.slot === -1) {
             return;
         }
@@ -1599,6 +1628,51 @@ class World {
             type: 'player_logout',
             username: player.username
         });
+    }
+
+    addSimulatedPlayer(player: SimulatedPlayer): boolean {
+        if (player.slot !== -1) {
+            return true;
+        }
+
+        const slot = this.getNextPlayerSlot();
+        if (slot === -1) {
+            return false;
+        }
+
+        this.playerLoop.add(2130706433n, player);
+        this.players[slot] = player;
+        rsbuf.addPlayer(slot);
+
+        player.slot = slot;
+        player.uid = ((Number(player.username37 & 0x1fffffn) << 11) | player.slot) >>> 0;
+        player.tele = true;
+        player.jump = true;
+        player.moveClickRequest = false;
+        player.lastConnected = this.currentTick;
+        player.lastResponse = this.currentTick;
+        player.isActive = true;
+        player.lastStepX = player.x - 1;
+        player.lastStepZ = player.z;
+        player.applyHumanBaseAnimations();
+
+        this.gameMap.getZone(player.x, player.z, player.level).enter(player);
+        return true;
+    }
+
+    removeSimulatedPlayer(player: SimulatedPlayer): void {
+        if (player.slot === -1) {
+            player.syncProfile(this.currentTick);
+            return;
+        }
+
+        rsbuf.removePlayer(player.slot);
+        this.gameMap.getZone(player.x, player.z, player.level).leave(player);
+        delete this.players[player.slot];
+        player.unlink();
+        player.syncProfile(this.currentTick);
+        player.cleanup();
+        player.isActive = false;
     }
 
     // let the login server know this player can log in elsewhere, do not update save file
@@ -1701,9 +1775,22 @@ class World {
         return count;
     }
 
+    getTotalHumanPlayers(): number {
+        let count = 0;
+
+        for (let i = 1; i < 2047; i++) {
+            const player = this.players[i];
+            if (typeof player !== 'undefined' && !isSimulatedPlayer(player)) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     scaleByPlayerCount(rate: number): number {
         // not sure if it caps at 2k player count or not
-        const playerCount = Math.min(this.getTotalPlayers(), 2000);
+        const playerCount = Math.min(this.getTotalHumanPlayers(), 2000);
         return (((4000 - playerCount) * rate) / 4000) | 0; // assuming scale works the same way as the runescript one
     }
 
@@ -2194,7 +2281,7 @@ class World {
                 return;
             }
 
-            if (this.getTotalPlayers() > Environment.NODE_MAX_CONNECTED) {
+            if (this.getTotalHumanPlayers() > Environment.NODE_MAX_CONNECTED) {
                 client.send(Uint8Array.from([7]));
                 client.close();
                 return;
@@ -2333,6 +2420,10 @@ class World {
     }
 
     flushPlayer(player: Player) {
+        if (isSimulatedPlayer(player)) {
+            return;
+        }
+
         const save = player.save();
 
         this.logoutRequests.set(player.username, {
