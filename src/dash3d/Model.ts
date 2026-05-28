@@ -10,6 +10,8 @@ import PointNormal from '#/dash3d/PointNormal.js';
 import ModelSource from '#/dash3d/ModelSource.js';
 import type OnDemandProvider from '#/io/OnDemandProvider.js';
 
+const MODEL_FAR_PLANE = 50 * 128 + 512;
+
 class Metadata {
     src: Uint8Array | null = null;
 
@@ -1720,7 +1722,7 @@ export default class Model extends ModelSource {
         const radiusCosEyePitch: number = (this.radius * cosEyePitch) >> 16;
 
         const maxZ: number = midZ + radiusCosEyePitch;
-        if (maxZ <= 50 || midZ >= 3500) {
+        if (maxZ <= 50 || midZ >= MODEL_FAR_PLANE) {
             return;
         }
 

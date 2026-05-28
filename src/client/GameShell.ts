@@ -101,6 +101,7 @@ export default abstract class GameShell {
         canvas.onpointerenter = this.onpointerenter.bind(this);
         canvas.onpointerleave = this.onpointerleave.bind(this);
         canvas.onpointermove = this.onpointermove.bind(this);
+        canvas.onwheel = this.onwheel.bind(this);
         window.onmouseup = this.windowMouseUp.bind(this);
         window.onmousemove = this.windowMouseMove.bind(this);
 
@@ -417,10 +418,19 @@ export default abstract class GameShell {
         this.mouseY = y;
     }
 
-    protected windowMouseUp(e: MouseEvent) {
+    protected windowMouseUp(_e: MouseEvent) {
     }
 
-    protected windowMouseMove(e: MouseEvent) {
+    protected windowMouseMove(_e: MouseEvent) {
+    }
+
+    private onwheel(e: WheelEvent) {
+        const { x, y } = this.getMousePos(e);
+
+        this.mouseWheel(x, y, e);
+    }
+
+    protected mouseWheel(_x: number, _y: number, _e: WheelEvent) {
     }
 
     private onkeydown(e: KeyboardEvent) {
@@ -539,6 +549,14 @@ export default abstract class GameShell {
             this.keyQueueReadPos = (this.keyQueueReadPos + 1) & 0x7f;
         }
         return key;
+    }
+
+    protected remapKeyDown(ch: number, _event: KeyboardEvent): number | null {
+        return ch;
+    }
+
+    protected remapKeyUp(ch: number, _event: KeyboardEvent): number | null {
+        return ch;
     }
 
     private onfocus(_e: FocusEvent) {
