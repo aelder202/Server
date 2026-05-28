@@ -1,0 +1,7 @@
+{
+  "rev": "254",
+  "repos": {
+    "engine": "https://github.com/aelder202/Engine-TS",
+    "webclient": "https://github.com/aelder202/Client-TS"
+  }
+}

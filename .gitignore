@@ -1,4 +1,8 @@
 node_modules/
 .DS_Store
 
-server.json
+# These are cloned and managed by start.js as nested Git repositories.
+content/
+engine/
+javaclient/
+webclient/

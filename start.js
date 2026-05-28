@@ -8,13 +8,19 @@ const { select } = require('@inquirer/prompts');
 
 // if you're forking this feel free to change these :) it does make some assumptions elsewhere (branch names)
 const repoOrg = 'https://github.com/LostCityRS';
-const engineRepo = 'Engine-TS';
-const contentRepo = 'Content';
-const webRepo = 'Client-TS';
-const javaRepo = 'Client-Java';
+const repos = {
+    engine: 'Engine-TS',
+    content: 'Content',
+    webclient: 'Client-TS',
+    javaclient: 'Client-Java'
+};
+
+function getRepoUrl(repo) {
+    return config.repos?.[repo] ?? `${repoOrg}/${repos[repo]}`;
+}
 
 function cloneRepo(repo, dir, branch) {
-    child_process.execSync(`git clone ${repoOrg}/${repo} --single-branch -b ${branch} ${dir}`, {
+    child_process.execSync(`git clone ${getRepoUrl(repo)} --single-branch -b ${branch} ${dir}`, {
         stdio: 'inherit'
     });
 }
@@ -93,19 +99,19 @@ async function main() {
     config = JSON.parse(fs.readFileSync('server.json', 'utf8'));
 
     if (!fs.existsSync('engine')) {
-        cloneRepo(engineRepo, 'engine', config.rev);
+        cloneRepo('engine', 'engine', config.rev);
     }
 
     if (!fs.existsSync('content')) {
-        cloneRepo(contentRepo, 'content', config.rev);
+        cloneRepo('content', 'content', config.rev);
     }
 
     if (revInfo[config.rev]?.webclient && !fs.existsSync('webclient')) {
-        cloneRepo(webRepo, 'webclient', config.rev);
+        cloneRepo('webclient', 'webclient', config.rev);
     }
 
     if (!fs.existsSync('javaclient')) {
-        cloneRepo(javaRepo, 'javaclient', revInfo[config.rev]?.clientBranch ?? config.rev);
+        cloneRepo('javaclient', 'javaclient', revInfo[config.rev]?.clientBranch ?? config.rev);
     }
 
     if (!fs.existsSync('engine/.env') && !fs.existsSync('engine/data/config/world.json')) {
