@@ -201,8 +201,8 @@ export default class BankMarketPlugin implements ClientPlugin {
             return;
         }
 
-        const action: string | undefined = target.dataset.marketAction;
-        const id: number = Number.parseInt(target.dataset.marketId ?? '', 10);
+        const action: string | null = target.getAttribute('data-market-action');
+        const id: number = Number.parseInt(target.getAttribute('data-market-id') ?? '', 10);
         const amount: number = Math.max(1, Math.min(MAX_AMOUNT, Number.parseInt(this.amountInput?.value ?? '1', 10) || 1));
         if ((action === 'buy' || action === 'sell') && Number.isSafeInteger(id)) {
             this.setStatus(`${action === 'buy' ? 'Buying' : 'Selling'}…`);
