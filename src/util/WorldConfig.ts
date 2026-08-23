@@ -30,6 +30,7 @@ export interface WorldConfig {
         profile: string;
         maxConnected: number;
         adminUsername: string;
+        adminPasswordHash: string;
         livingWorld: {
             enabled: boolean;
             maxBots: number;
@@ -111,6 +112,7 @@ export function createDefaultWorldConfig(): WorldConfig {
             profile: 'main',
             maxConnected: 1000,
             adminUsername: 'mod',
+            adminPasswordHash: '',
             livingWorld: {
                 enabled: true,
                 maxBots: 200,
@@ -257,6 +259,7 @@ function migrateFromLegacyEnv(defaults: WorldConfig, env: Record<string, string>
     config.node.profile = tryParseString(env.NODE_PROFILE, config.node.profile);
     config.node.maxConnected = tryParseInt(env.NODE_MAX_CONNECTED, config.node.maxConnected);
     config.node.adminUsername = tryParseString(env.NODE_ADMIN_USERNAME, config.node.adminUsername);
+    config.node.adminPasswordHash = tryParseString(env.NODE_ADMIN_PASSWORD_HASH, config.node.adminPasswordHash);
     config.node.livingWorld.enabled = tryParseBoolean(env.NODE_LIVING_WORLD, config.node.livingWorld.enabled);
     config.node.livingWorld.maxBots = tryParseInt(env.NODE_LIVING_WORLD_MAX_BOTS, config.node.livingWorld.maxBots);
     config.node.livingWorld.radius = tryParseInt(env.NODE_LIVING_WORLD_RADIUS, config.node.livingWorld.radius);

@@ -1,6 +1,8 @@
 import fs from 'fs';
 import { parentPort } from 'worker_threads';
 
+import * as bcrypt from 'bcrypt-ts';
+
 import { LoginClient } from '#/server/login/LoginClient.js';
 import Environment from '#/util/Environment.js';
 
@@ -12,6 +14,19 @@ const client = new LoginClient(Environment.node.id);
 function staffLevelFor(username: string): number {
     const adminUsername = Environment.node.adminUsername.trim().toLowerCase();
     return adminUsername.length > 0 && username.trim().toLowerCase() === adminUsername ? 4 : 0;
+}
+
+function isAdminUsername(username: string): boolean {
+    return staffLevelFor(username) === 4;
+}
+
+async function hasValidLocalAdminPassword(username: string, password: string): Promise<boolean> {
+    if (!isAdminUsername(username)) {
+        return true;
+    }
+
+    const passwordHash = Environment.node.adminPasswordHash.trim();
+    return passwordHash.length > 0 && (await bcrypt.compare(password.toLowerCase(), passwordHash));
 }
 
 if (!parentPort) throw new Error('This file must be run as a worker thread.');
@@ -65,6 +80,22 @@ async function handleRequests(parentPort: ParentPort, msg: any) {
                 });
                 stopTimer();
             } else {
+                if (!(await hasValidLocalAdminPassword(username, password))) {
+                    parentPort.postMessage({
+                        type: 'player_login',
+                        socket,
+                        username,
+                        lowMemory,
+                        reconnecting,
+                        reply: 1,
+                        staffmodlevel: 0,
+                        save: null,
+                        account_id: -1,
+                        members: Environment.node.members
+                    });
+                    break;
+                }
+
                 const staffmodlevel = staffLevelFor(username);
 
                 const profile = Environment.node.profile;
