@@ -1,9 +1,7 @@
 import SeqType from '#/cache/config/SeqType.js';
 import { CoordGrid } from '#/engine/CoordGrid.js';
-import { isClientConnected } from '#/engine/entity/NetworkPlayer.js';
-import Player from '#/engine/entity/Player.js';
 import { PlayerStat } from '#/engine/entity/PlayerStat.js';
-import SimulatedPlayer, { isSimulatedPlayer } from '#/engine/entity/SimulatedPlayer.js';
+import SimulatedPlayer from '#/engine/entity/SimulatedPlayer.js';
 import { findPath, isIndoors, isMapBlocked } from '#/engine/GameMap.js';
 import BotProfileStore, { BotItemStore, BotProfile, LivingWorldActivity } from '#/engine/living/BotProfileStore.js';
 import Environment from '#/util/Environment.js';
@@ -37,6 +35,7 @@ type AreaDefinition = {
 };
 
 type BotRuntime = {
+    areaId: string;
     activity: ActivityDefinition;
     destination: Coord;
     nextActionTick: number;
@@ -52,7 +51,6 @@ type BotRuntime = {
 
 type LivingWorldHost = {
     currentTick: number;
-    playerLoop: { all(): IterableIterator<Player> };
     addSimulatedPlayer(player: SimulatedPlayer): boolean;
     removeSimulatedPlayer(player: SimulatedPlayer): void;
 };
@@ -392,7 +390,121 @@ const VARROCK: AreaDefinition = {
     ]
 };
 
-const AREAS = [LUMBRIDGE, VARROCK];
+type TownIndustry = 'woodcutting' | 'fishing' | 'mining';
+
+function townPoint(center: Coord, x: number, z: number): Coord {
+    return { level: center.level, x: center.x + x, z: center.z + z };
+}
+
+function createTownArea(id: string, name: string, center: Coord, bank: Coord, industry: TownIndustry): AreaDefinition {
+    const points: Coord[] = [
+        townPoint(center, 0, 0),
+        townPoint(center, 3, 1),
+        townPoint(center, -4, 2),
+        townPoint(center, 6, -3),
+        townPoint(center, -7, -4),
+        townPoint(center, 10, 6),
+        townPoint(center, -11, 5),
+        townPoint(center, 4, 10),
+        townPoint(center, -5, -10),
+        townPoint(center, 13, -8),
+        townPoint(center, -13, -7),
+        townPoint(center, 8, 13)
+    ];
+    const resourceSpots: Coord[] = [points[4], points[6], points[8], points[10]];
+    const industryActivity: ActivityDefinition =
+        industry === 'fishing'
+            ? {
+                  id: 'fishing',
+                  label: `Fishing near ${name}`,
+                  spots: resourceSpots,
+                  stat: PlayerStat.FISHING,
+                  xp: 120,
+                  product: 'raw_shrimps',
+                  maxInventory: 20,
+                  actionTicks: [9, 17],
+                  actionLoops: [3, 8],
+                  anims: ['human_smallnet'],
+                  chats: [`Fishing near ${name}.`, 'Another load for the bank.', 'These should sell.'],
+                  weight: 6
+              }
+            : industry === 'mining'
+              ? {
+                    id: 'mining',
+                    label: `Mining near ${name}`,
+                    spots: resourceSpots,
+                    stat: PlayerStat.MINING,
+                    xp: 175,
+                    product: 'copper_ore',
+                    maxInventory: 20,
+                    actionTicks: [10, 18],
+                    actionLoops: [3, 8],
+                    anims: ['human_mining_rune_pickaxe', 'human_mining_mithril_pickaxe', 'human_mining_steel_pickaxe', 'human_mining_bronze_pickaxe'],
+                    chats: [`Mining near ${name}.`, 'Banking after this load.', 'Ore prices are decent.'],
+                    weight: 6
+                }
+              : {
+                    id: 'woodcutting',
+                    label: `Chopping trees near ${name}`,
+                    spots: resourceSpots,
+                    stat: PlayerStat.WOODCUTTING,
+                    xp: 250,
+                    product: 'logs',
+                    maxInventory: 18,
+                    actionTicks: [9, 16],
+                    actionLoops: [3, 8],
+                    anims: ['human_woodcutting_rune_axe', 'human_woodcutting_mithril_axe', 'human_woodcutting_steel_axe', 'human_woodcutting_bronze_axe', 'human_axe_chop'],
+                    chats: [`Chopping near ${name}.`, 'A few more logs.', 'Selling these after banking.'],
+                    weight: 6
+                };
+
+    return {
+        id,
+        center,
+        radius: 80,
+        bank,
+        safePoints: points.slice(0, 8),
+        spawnPoints: points,
+        activities: [
+            industryActivity,
+            {
+                id: 'combat',
+                label: `Training near ${name}`,
+                spots: [points[3], points[5], points[7], points[9]],
+                stat: PlayerStat.ATTACK,
+                xp: 180,
+                product: 'bones',
+                maxInventory: 16,
+                actionTicks: [8, 14],
+                actionLoops: [2, 7],
+                anims: ['human_axe_hack', 'human_staff_pummel', 'human_unarmedpunch', 'human_axe_chop'],
+                chats: [`Training near ${name}.`, 'One more fight.', 'I should bank soon.'],
+                weight: 3
+            },
+            {
+                id: 'travelling',
+                label: `Walking through ${name}`,
+                spots: points,
+                actionTicks: [4, 10],
+                actionLoops: [1, 3],
+                anims: [],
+                chats: [`Heading through ${name}.`, 'Running errands.', 'Back to the bank soon.'],
+                weight: 4
+            }
+        ]
+    };
+}
+
+const FALADOR = createTownArea('falador', 'Falador', { level: 0, x: 2965, z: 3379 }, { level: 0, x: 2945, z: 3368 }, 'mining');
+const DRAYNOR = createTownArea('draynor', 'Draynor Village', { level: 0, x: 3080, z: 3250 }, { level: 0, x: 3092, z: 3243 }, 'woodcutting');
+const PORT_SARIM = createTownArea('port_sarim', 'Port Sarim', { level: 0, x: 3027, z: 3225 }, { level: 0, x: 3045, z: 3235 }, 'fishing');
+const AL_KHARID = createTownArea('al_kharid', 'Al Kharid', { level: 0, x: 3292, z: 3183 }, { level: 0, x: 3269, z: 3167 }, 'mining');
+const SEERS = createTownArea('seers', "Seers' Village", { level: 0, x: 2732, z: 3485 }, { level: 0, x: 2725, z: 3493 }, 'woodcutting');
+const ARDOUGNE = createTownArea('ardougne', 'Ardougne', { level: 0, x: 2663, z: 3302 }, { level: 0, x: 2616, z: 3332 }, 'woodcutting');
+const BRIMHAVEN = createTownArea('brimhaven', 'Brimhaven', { level: 0, x: 2802, z: 3177 }, { level: 0, x: 2802, z: 3177 }, 'fishing');
+const RIMMINGTON = createTownArea('rimmington', 'Rimmington', { level: 0, x: 2956, z: 3210 }, { level: 0, x: 2956, z: 3210 }, 'mining');
+
+const AREAS: AreaDefinition[] = [LUMBRIDGE, VARROCK, FALADOR, DRAYNOR, PORT_SARIM, AL_KHARID, SEERS, ARDOUGNE, BRIMHAVEN, RIMMINGTON];
 
 const BANKING_ACTIVITY: ActivityDefinition = {
     id: 'banking',
@@ -493,6 +605,8 @@ export default class WorldLifeDirector {
         if (!enabled) {
             this.despawnAll();
             this.store.saveAll();
+        } else {
+            this.nextManageTick = 0;
         }
     }
 
@@ -507,7 +621,8 @@ export default class WorldLifeDirector {
     }
 
     getStatus(): string {
-        return `Living world ${this.enabled ? 'enabled' : 'disabled'}: ${this.active.size}/${Environment.node.livingWorld.maxBots} active bots.`;
+        const populatedAreas = new Set([...this.runtime.values()].map(runtime => runtime.areaId)).size;
+        return `Living world ${this.enabled ? 'enabled' : 'disabled'}: ${this.active.size}/${Environment.node.livingWorld.maxBots} active bots across ${populatedAreas}/${AREAS.length} city hubs.`;
     }
 
     tick(): void {
@@ -515,35 +630,27 @@ export default class WorldLifeDirector {
             return;
         }
 
-        const humans = this.connectedHumans();
-        if (humans.length === 0) {
-            if (this.active.size > 0) {
-                this.despawnAll();
-                this.store.saveAll();
-            }
-            return;
-        }
-
-        const anchor = humans[0];
-        const area = this.areaFor(anchor);
-        if (!area) {
-            this.despawnAll();
-            return;
-        }
-
         for (const bot of [...this.active.values()]) {
-            if (!bot.isActive || distance(bot, anchor) > Environment.node.livingWorld.radius + area.radius) {
+            if (!bot.isActive) {
                 this.despawn(bot);
                 continue;
             }
 
+            let runtime = this.runtime.get(bot.profile.id);
+            if (!runtime) {
+                const area = this.nearestArea(bot);
+                runtime = this.createRuntime(bot, area);
+                this.runtime.set(bot.profile.id, runtime);
+            }
+
+            const area = AREAS.find(candidate => candidate.id === runtime.areaId) ?? this.nearestArea(bot);
             bot.touch(this.world.currentTick);
             this.tickBot(bot, area);
         }
 
         if (this.world.currentTick >= this.nextManageTick) {
             this.nextManageTick = this.world.currentTick + 10;
-            this.ensurePopulation(area, humans.length);
+            this.ensurePopulation();
         }
 
         if (this.world.currentTick >= this.nextSaveTick) {
@@ -553,55 +660,72 @@ export default class WorldLifeDirector {
         }
     }
 
-    private connectedHumans(): Player[] {
-        const humans: Player[] = [];
-        for (const player of this.world.playerLoop.all()) {
-            if (!isSimulatedPlayer(player) && isClientConnected(player)) {
-                humans.push(player);
-            }
-        }
-        return humans;
+    private nearestArea(point: { level: number; x: number; z: number }): AreaDefinition {
+        const sameLevel = AREAS.filter(area => area.center.level === point.level);
+        const candidates = sameLevel.length > 0 ? sameLevel : AREAS;
+        return candidates.reduce((closest, area) => (distance(point, area.center) < distance(point, closest.center) ? area : closest));
     }
 
-    private areaFor(player: Player): AreaDefinition | null {
-        return AREAS.find(area => player.level === area.center.level && distance(player, area.center) <= area.radius) ?? null;
-    }
+    private ensurePopulation(): void {
+        const desired = Environment.node.livingWorld.maxBots;
+        const baseTarget = Math.trunc(desired / AREAS.length);
+        const remainder = desired % AREAS.length;
+        const buckets = new Map<string, SimulatedPlayer[]>(AREAS.map(area => [area.id, []]));
 
-    private ensurePopulation(area: AreaDefinition, humanCount: number): void {
-        const desired = humanCount > 0 ? Environment.node.livingWorld.maxBots : 0;
-
-        while (this.active.size > desired) {
-            const bot = this.active.values().next().value as SimulatedPlayer | undefined;
-            if (!bot) {
-                break;
+        for (const bot of [...this.active.values()]) {
+            const runtime = this.runtime.get(bot.profile.id);
+            const bucket = runtime ? buckets.get(runtime.areaId) : undefined;
+            if (!bucket) {
+                this.despawn(bot);
+                continue;
             }
-            this.despawn(bot);
+            bucket.push(bot);
         }
 
-        while (this.active.size < desired) {
-            const activeIds = new Set(this.active.keys());
-            const profile = this.store.checkout(activeIds);
-            if (!profile) {
-                return;
+        for (let index = 0; index < AREAS.length; index++) {
+            const area = AREAS[index];
+            const target = baseTarget + (index < remainder ? 1 : 0);
+            const bots = buckets.get(area.id) ?? [];
+            while (bots.length > target) {
+                const bot = bots.pop();
+                if (bot) {
+                    this.despawn(bot);
+                }
             }
+        }
 
-            const spawn = randomOf(area.spawnPoints);
-            profile.x = spawn.x;
-            profile.z = spawn.z;
-            profile.level = spawn.level;
-            profile.activity = 'idle';
-            profile.goal = 'Arriving nearby';
+        const activeIds = new Set(this.active.keys());
+        for (let index = 0; index < AREAS.length; index++) {
+            const area = AREAS[index];
+            const target = baseTarget + (index < remainder ? 1 : 0);
+            const bots = buckets.get(area.id) ?? [];
+            while (bots.length < target) {
+                const profile = this.store.checkout(activeIds);
+                if (!profile) {
+                    return;
+                }
 
-            const bot = new SimulatedPlayer(profile);
-            if (!this.world.addSimulatedPlayer(bot)) {
-                return;
+                const usableSpawns = area.spawnPoints.filter(spawn => this.isUsableDestination(spawn, area));
+                const spawn = randomOf(usableSpawns.length > 0 ? usableSpawns : area.spawnPoints);
+                profile.x = spawn.x;
+                profile.z = spawn.z;
+                profile.level = spawn.level;
+                profile.activity = 'idle';
+                profile.goal = `Arriving in ${area.id.replaceAll('_', ' ')}`;
+
+                const bot = new SimulatedPlayer(profile);
+                if (!this.world.addSimulatedPlayer(bot)) {
+                    return;
+                }
+
+                if (Math.random() < 0.35) {
+                    bot.say(randomOf(['Hello.', 'Anyone training here?', 'Busy world today.', 'Back to work.']));
+                }
+                activeIds.add(profile.id);
+                bots.push(bot);
+                this.active.set(profile.id, bot);
+                this.runtime.set(profile.id, this.createRuntime(bot, area));
             }
-
-            if (Math.random() < 0.35) {
-                bot.say(randomOf(['Hello.', 'Anyone training here?', 'Busy world today.', 'Back to work.']));
-            }
-            this.active.set(profile.id, bot);
-            this.runtime.set(profile.id, this.createRuntime(bot, area));
         }
     }
 
@@ -612,6 +736,7 @@ export default class WorldLifeDirector {
         bot.profile.goal = activity.label;
 
         return {
+            areaId: area.id,
             activity,
             destination,
             nextActionTick: this.world.currentTick + randomDelay(activity.actionTicks),
@@ -757,10 +882,7 @@ export default class WorldLifeDirector {
         this.playActivityAnimation(bot, runtime.activity);
         consumeItems(profile.inventory, runtime.activity.consumes);
 
-        const advanced =
-            runtime.activity.stat !== undefined && runtime.activity.xp
-                ? bot.addSimulatedXp(runtime.activity.stat, runtime.activity.xp)
-                : false;
+        const advanced = runtime.activity.stat !== undefined && runtime.activity.xp ? bot.addSimulatedXp(runtime.activity.stat, runtime.activity.xp) : false;
 
         if (runtime.activity.product) {
             addItem(profile.inventory, runtime.activity.product, 1);
