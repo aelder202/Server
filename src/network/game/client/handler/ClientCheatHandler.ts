@@ -104,6 +104,12 @@ export default class ClientCheatHandler extends ClientGameMessageHandler<ClientC
             return true;
         }
 
+        // Keep the safe Lumbridge return available to regular players. Other
+        // teleport favorites remain staff-only below.
+        if (cmd === 'home' || cmd === 'lumby' || cmd === 'lumbridge') {
+            return teleportToFavorite(player, TELEPORT_FAVORITES[cmd]);
+        }
+
         if (player.staffModLevel >= 2) {
             player.addSessionLog(LoggerEventType.MODERATOR, 'Ran cheat', cheat);
         }
