@@ -21,6 +21,7 @@
     "lint": "eslint --no-warn-ignored src tools",
     "logger": "tsx src/logger.ts",
     "login": "tsx src/login.ts",
+    "player:manage": "tsx tools/player/ManagePlayers.ts",
     "prepare": "husky",
     "quickstart": "tsx src/app.ts",
     "setup": "npm install && tsx src/setup.ts",

@@ -7,6 +7,7 @@ import { LoginClient } from '#/server/login/LoginClient.js';
 import Environment from '#/util/Environment.js';
 
 import { type GenericLoginThreadResponse } from './index.d.js';
+import { verifyOrCreateLocalAccountPassword } from './LocalAccountStore.js';
 import { trackLoginAttempts, trackLoginTime } from './LoginMetrics.js';
 
 const client = new LoginClient(Environment.node.id);
@@ -81,6 +82,22 @@ async function handleRequests(parentPort: ParentPort, msg: any) {
                 stopTimer();
             } else {
                 if (!(await hasValidLocalAdminPassword(username, password))) {
+                    parentPort.postMessage({
+                        type: 'player_login',
+                        socket,
+                        username,
+                        lowMemory,
+                        reconnecting,
+                        reply: 1,
+                        staffmodlevel: 0,
+                        save: null,
+                        account_id: -1,
+                        members: Environment.node.members
+                    });
+                    break;
+                }
+
+                if (!isAdminUsername(username) && !(await verifyOrCreateLocalAccountPassword(username, password))) {
                     parentPort.postMessage({
                         type: 'player_login',
                         socket,
