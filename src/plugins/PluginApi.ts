@@ -44,6 +44,7 @@ export interface ClientPlugin {
     onKeyDown?(ctx: ClientPluginContext, ch: number, event: KeyboardEvent): number | null | void;
     onKeyUp?(ctx: ClientPluginContext, ch: number, event: KeyboardEvent): number | null | void;
     onMouseWheel?(ctx: ClientPluginContext, event: WheelEvent): boolean | void;
+    onGameMessage?(ctx: ClientPluginContext, message: string): boolean | void;
     getChatInputHint?(ctx: ClientPluginContext): string | null;
 }
 
@@ -59,6 +60,7 @@ export interface PluginClient {
     clearCameraInput(): void;
     adjustExtendedCameraZoom(deltaY: number): void;
     resetCameraZoom(): void;
+    sendPluginServerCommand(command: string): void;
 }
 
 export function stripMenuTags(text: string): string {
@@ -110,6 +112,10 @@ export class ClientPluginContext {
 
     resetCameraZoom(): void {
         this.client.resetCameraZoom();
+    }
+
+    sendServerCommand(command: string): void {
+        this.client.sendPluginServerCommand(command);
     }
 
     drawTileOutline(tileX: number, tileZ: number, level: number, rgb: number, inset: number = 2): boolean {

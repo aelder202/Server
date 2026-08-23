@@ -716,6 +716,11 @@ export class Client extends GameShell {
         this.orbitCameraZoom = 0;
     }
 
+    sendPluginServerCommand(command: string): void {
+        const normalized: string = command.startsWith('::') ? command : `::${command}`;
+        this.sendServerCommand(normalized);
+    }
+
     static setLowMem(): void {
         World.lowMem = true;
         Pix3D.lowMem = true;
@@ -6735,7 +6740,9 @@ export class Client extends GameShell {
             if (this.ptype === ServerProt.MESSAGE_GAME) {
                 const message: string = this.in.gjstr();
 
-                if (message.endsWith(':tradereq:')) {
+                if (this.pluginManager.onGameMessage(message)) {
+                    // Plugin protocol messages are intentionally hidden from chat.
+                } else if (message.endsWith(':tradereq:')) {
                     const player: string = message.substring(0, message.indexOf(':'));
                     const username = JString.toUserhash(player);
 

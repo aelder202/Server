@@ -30,8 +30,6 @@ const CLIENT_COMMANDS: CommandButton[] = [
 ];
 
 const SERVER_COMMANDS: CommandButton[] = [
-    { label: 'Bot stock', command: '::botstock', description: 'Refresh the nearby adventurer bot resource list.', mode: 'run', tags: ['living world'] },
-    { label: 'Buy from bot', command: '::botbuy <item> <amount>', description: 'Buy gathered resources from the adventurer bot you traded with.', mode: 'fill', tags: ['living world'] },
     { label: 'Get coord', command: '::getcoord', description: 'Display your current coordinate.', mode: 'fill', tags: ['staff 2'] },
     { label: 'Teleport list', command: '::teles', description: 'Show teleport favorites.', mode: 'fill', tags: ['staff 2'] },
     { label: 'Teleport favorite', command: '::telefav <name>', description: 'Teleport to a named favorite.', mode: 'fill', tags: ['staff 2'] },
@@ -121,7 +119,7 @@ const STAFF_COMMANDS: CommandButton[] = [
 ];
 const COMMON_COMMANDS: CommandButton[] = [
     ...CLIENT_COMMANDS.filter(item => ['::plugins', '::fpson', '::fpsoff', '::fps <target>', '::pickpocket on', '::pickpocket off'].includes(item.command) || item.command.startsWith(`::plugin ${WASD_CAMERA_PLUGIN_ID}`)),
-    ...SERVER_COMMANDS.filter(item => ['::botstock', '::botbuy <item> <amount>', '::getcoord', '::teles', '::telefav <name>', '::tele <level,mapX,mapZ[,tileX,tileZ]>'].includes(item.command)),
+    ...SERVER_COMMANDS.filter(item => ['::getcoord', '::teles', '::telefav <name>', '::tele <level,mapX,mapZ[,tileX,tileZ]>'].includes(item.command)),
     ...TELEPORT_FAVORITES.filter(item => COMMON_TELEPORTS.has(item.label))
 ];
 const SEARCH_COMMANDS: CommandButton[] = [...CLIENT_COMMANDS, ...SERVER_COMMANDS, ...TELEPORT_FAVORITES, ...DEBUG_SCRIPT_COMMANDS];

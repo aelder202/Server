@@ -168,6 +168,24 @@ export default class PluginManager {
         return handled;
     }
 
+    onGameMessage(message: string): boolean {
+        for (const plugin of this.plugins.values()) {
+            if (!plugin.enabled || !plugin.started || !plugin.plugin.onGameMessage) {
+                continue;
+            }
+
+            try {
+                if (plugin.plugin.onGameMessage(this.ctx, message) === true) {
+                    return true;
+                }
+            } catch (e) {
+                console.warn(`Plugin ${plugin.plugin.id} failed in game message handler`, e);
+            }
+        }
+
+        return false;
+    }
+
     getChatInputHint(): string | null {
         for (const plugin of this.plugins.values()) {
             if (!plugin.enabled || !plugin.started || !plugin.plugin.getChatInputHint) {
