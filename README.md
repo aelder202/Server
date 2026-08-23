@@ -25,7 +25,7 @@ You can press `ctrl + c` to cancel/quit out of a terminal process.
 
 This workspace targets revision 274 and includes a zoomable extended-distance web client, configurable XP rates, a single configured administrator account (`mod` by default), and a persistent living world of up to 200 simulated adventurers. Adventurer bots travel, skill, chat, bank their gathered resources, and sell those resources when you use the normal **Trade with** player option. After inspecting a bot's stock, use `::botbuy <item> <amount>` to purchase and `::botstock` to refresh the offer.
 
-The web controls include a persistent **WASD Camera** toggle. When enabled, W/S tilt and A/D rotate the camera. Press Enter to focus chat, then Enter again to send and return to camera mode; Escape cancels chat focus. The same setting is available under **Commands → Plugins** as **WASD Camera / Enter to Chat**.
+The web controls include a persistent **WASD Camera** toggle. When enabled, W/S tilt and A/D rotate the camera. Press Enter to focus chat, then Enter again to send and return to camera mode; Escape clears the current draft and returns to **Press Enter to chat...**. The same setting is available under **Commands → Plugins** as **WASD Camera / Enter to Chat**.
 
 Runtime settings live in the ignored `engine/data/config/world.json` file. In particular, `node.adminUsername`, `node.adminPasswordHash`, `node.xpRate`, and `node.livingWorld` control the protected administrator, XP multiplier, and bot population without rebuilding the code. Only the configured administrator receives staff level 4; all other local accounts receive staff level 0.
 
