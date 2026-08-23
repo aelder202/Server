@@ -21,7 +21,7 @@ const WASD_CAMERA_KEYS: Map<number, number> = new Map([
 
 export default class KeyRemappingPlugin implements ClientPlugin {
     readonly id: string = 'key-remapping';
-    readonly name: string = 'Key Remapping';
+    readonly name: string = 'WASD Camera / Enter to Chat';
 
     private chatUnlocked: boolean = false;
     private readonly heldCameraRemaps: Set<number> = new Set();
@@ -102,7 +102,7 @@ export default class KeyRemappingPlugin implements ClientPlugin {
             return null;
         }
 
-        return 'Press enter to chat...';
+        return 'Press Enter to chat...';
     }
 
     private lockChat(ctx: ClientPluginContext): void {

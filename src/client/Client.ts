@@ -677,7 +677,7 @@ export class Client extends GameShell {
 
     isChatInputRemappingAvailable(): boolean {
         return this.ingame
-            && this.chatComId === -1
+            && this.chatModalId === -1
             && !this.dialogInputOpen
             && !this.socialInputOpen
             && !(this.mainModalId !== -1 && this.mainModalId === this.reportAbuseComId);
@@ -688,7 +688,7 @@ export class Client extends GameShell {
     }
 
     requestRedrawChatback(): void {
-        this.redrawChatback = true;
+        this.redrawChat = true;
     }
 
     clearCameraInput(): void {

@@ -13,8 +13,12 @@ type CommandButton = {
     tags?: string[];
 };
 
+const WASD_CAMERA_PLUGIN_ID = 'key-remapping';
+
 const CLIENT_COMMANDS: CommandButton[] = [
     { label: 'List plugins', command: '::plugins', description: 'Show plugin states in chat.', mode: 'run' },
+    { label: 'WASD camera on', command: `::plugin ${WASD_CAMERA_PLUGIN_ID} on`, description: 'Use WASD for the camera and Enter to focus chat.', mode: 'run', tags: ['camera', 'chat', 'qol'] },
+    { label: 'WASD camera off', command: `::plugin ${WASD_CAMERA_PLUGIN_ID} off`, description: 'Restore the original always-ready chat controls.', mode: 'run', tags: ['camera', 'chat', 'qol'] },
     { label: 'FPS on', command: '::fpson', description: 'Show the FPS counter.', mode: 'run' },
     { label: 'FPS off', command: '::fpsoff', description: 'Hide the FPS counter.', mode: 'run' },
     { label: 'Set FPS target', command: '::fps <target>', description: 'Set the client target framerate.', mode: 'fill' },
@@ -114,7 +118,7 @@ const STAFF_COMMANDS: CommandButton[] = [
     ...SERVER_COMMANDS.filter(item => !SERVER_TELEPORT_COMMANDS.includes(item))
 ];
 const COMMON_COMMANDS: CommandButton[] = [
-    ...CLIENT_COMMANDS.filter(item => ['::plugins', '::fpson', '::fpsoff', '::fps <target>'].includes(item.command)),
+    ...CLIENT_COMMANDS.filter(item => ['::plugins', '::fpson', '::fpsoff', '::fps <target>'].includes(item.command) || item.command.startsWith(`::plugin ${WASD_CAMERA_PLUGIN_ID}`)),
     ...SERVER_COMMANDS.filter(item => ['::botstock', '::botbuy <item> <amount>', '::getcoord', '::teles', '::telefav <name>', '::tele <level,mapX,mapZ[,tileX,tileZ]>'].includes(item.command)),
     ...TELEPORT_FAVORITES.filter(item => COMMON_TELEPORTS.has(item.label))
 ];
@@ -129,6 +133,7 @@ export function installCommandPanel(host: CommandPanelHost): void {
 
     const controls: HTMLElement | null = document.getElementById('controls');
     const triggers: HTMLButtonElement[] = [];
+    const wasdToggles: HTMLButtonElement[] = [];
     const createTrigger = (id: string): HTMLButtonElement => {
         const button = document.createElement('button');
         button.id = id;
@@ -138,25 +143,67 @@ export function installCommandPanel(host: CommandPanelHost): void {
         return button;
     };
 
+    const syncWasdToggles = (): void => {
+        const plugin = host.listPlugins().find(item => item.id === WASD_CAMERA_PLUGIN_ID);
+        const enabled = plugin?.enabled === true;
+        for (const button of wasdToggles) {
+            button.textContent = `WASD Camera: ${enabled ? 'On' : 'Off'}`;
+            button.classList.toggle('enabled', enabled);
+            button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+            button.title = enabled ? 'WASD moves the camera. Press Enter to chat.' : 'Enable WASD camera controls and press Enter to chat.';
+        }
+    };
+
+    const createWasdToggle = (id: string): HTMLButtonElement => {
+        const button = document.createElement('button');
+        button.id = id;
+        button.type = 'button';
+        button.addEventListener('click', async event => {
+            event.preventDefault();
+            event.stopPropagation();
+            button.disabled = true;
+            try {
+                await host.runCommand(`::plugin ${WASD_CAMERA_PLUGIN_ID} toggle`);
+                syncWasdToggles();
+            } finally {
+                button.disabled = false;
+            }
+        });
+        wasdToggles.push(button);
+        return button;
+    };
+
     const trigger = createTrigger('lostcity-command-panel-trigger');
+    const wasdToggle = createWasdToggle('lostcity-wasd-camera-toggle');
 
     if (controls) {
         controls.append(' | ');
         controls.appendChild(trigger);
+        controls.append(' | ');
+        controls.appendChild(wasdToggle);
 
         const floatingTrigger = createTrigger('lostcity-command-panel-floating-trigger');
         floatingTrigger.classList.add('floating');
         document.body.appendChild(floatingTrigger);
 
+        const floatingWasdToggle = createWasdToggle('lostcity-wasd-camera-floating-toggle');
+        floatingWasdToggle.classList.add('floating');
+        document.body.appendChild(floatingWasdToggle);
+
         const syncFloatingTrigger = (): void => {
-            floatingTrigger.hidden = getComputedStyle(controls).display !== 'none';
+            const controlsVisible = getComputedStyle(controls).display !== 'none';
+            floatingTrigger.hidden = controlsVisible;
+            floatingWasdToggle.hidden = controlsVisible;
         };
         syncFloatingTrigger();
         new MutationObserver(syncFloatingTrigger).observe(controls, { attributes: true, attributeFilter: ['style', 'class'] });
     } else {
         trigger.classList.add('floating');
         document.body.appendChild(trigger);
+        wasdToggle.classList.add('floating');
+        document.body.appendChild(wasdToggle);
     }
+    syncWasdToggles();
 
     const panel = document.createElement('div');
     panel.id = 'lostcity-command-panel';
@@ -253,6 +300,7 @@ export function installCommandPanel(host: CommandPanelHost): void {
         const handled = await host.runCommand(command);
         status.textContent = handled ? `Ran ${command}` : `Not handled: ${command}`;
         render();
+        syncWasdToggles();
 
         if (handled && closeOnHandled) {
             setOpen(false);
@@ -508,7 +556,9 @@ function installCommandPanelStyles(): void {
     style.id = 'lostcity-command-panel-style';
     style.textContent = `
         #lostcity-command-panel-trigger,
-        #lostcity-command-panel-floating-trigger {
+        #lostcity-command-panel-floating-trigger,
+        #lostcity-wasd-camera-toggle,
+        #lostcity-wasd-camera-floating-toggle {
             font-family: Arial, Helvetica, sans-serif;
             font-size: 12px;
             color: #04A800;
@@ -521,19 +571,37 @@ function installCommandPanelStyles(): void {
         #lostcity-command-panel-trigger.open,
         #lostcity-command-panel-floating-trigger.open,
         #lostcity-command-panel-trigger:hover,
-        #lostcity-command-panel-floating-trigger:hover {
+        #lostcity-command-panel-floating-trigger:hover,
+        #lostcity-wasd-camera-toggle:hover,
+        #lostcity-wasd-camera-floating-toggle:hover {
             text-decoration: underline;
         }
 
+        #lostcity-wasd-camera-toggle.enabled,
+        #lostcity-wasd-camera-floating-toggle.enabled {
+            color: #7CFC00;
+        }
+
         #lostcity-command-panel-trigger.floating,
-        #lostcity-command-panel-floating-trigger.floating {
+        #lostcity-command-panel-floating-trigger.floating,
+        #lostcity-wasd-camera-toggle.floating,
+        #lostcity-wasd-camera-floating-toggle.floating {
             position: fixed;
-            right: 12px;
             bottom: 12px;
             z-index: 10000;
             padding: 5px 8px;
             border: 1px solid #04A800;
             background: #000;
+        }
+
+        #lostcity-command-panel-trigger.floating,
+        #lostcity-command-panel-floating-trigger.floating {
+            right: 12px;
+        }
+
+        #lostcity-wasd-camera-toggle.floating,
+        #lostcity-wasd-camera-floating-toggle.floating {
+            right: 92px;
         }
 
         #lostcity-command-panel {
