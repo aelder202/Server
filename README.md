@@ -25,7 +25,9 @@ You can press `ctrl + c` to cancel/quit out of a terminal process.
 
 This workspace targets revision 274 and includes a zoomable extended-distance web client, configurable XP rates, a single configured administrator account (`mod` by default), and a persistent living world of up to 200 simulated adventurers. Adventurer bots travel, skill, chat, bank their gathered resources, and sell those resources when you use the normal **Trade with** player option. After inspecting a bot's stock, use `::botbuy <item> <amount>` to purchase and `::botstock` to refresh the offer.
 
-Runtime settings live in the ignored `engine/data/config/world.json` file. In particular, `node.adminUsername`, `node.adminPasswordHash`, `node.xpRate`, and `node.livingWorld` control the protected administrator, XP multiplier, and bot population without rebuilding the code. The administrator password is checked only for the configured administrator name; normal local accounts always receive staff level 0.
+Runtime settings live in the ignored `engine/data/config/world.json` file. In particular, `node.adminUsername`, `node.adminPasswordHash`, `node.xpRate`, and `node.livingWorld` control the protected administrator, XP multiplier, and bot population without rebuilding the code. Only the configured administrator receives staff level 4; all other local accounts receive staff level 0.
+
+Local character passwords are bcrypt-hashed in the ignored `engine/data/config/local-accounts.json` file. After upgrading from the former passwordless behavior, an unclaimed character adopts the password used for its first successful login. Subsequent logins must use that password. Use **Manage Characters** from `start.bat` to set a password in advance or change it later.
 
 ## Tailnet Access
 
@@ -38,6 +40,18 @@ The Serve configuration persists, but the game server must be running. After a r
 This fork keeps portable character saves in `saves/players/` so they can move with the launcher repo. On first startup, `start.js` restores that snapshot into `engine/data/players/` if the engine save folder is empty. When the server stops, `start.js` refreshes `saves/players/` from the live engine saves.
 
 After playing, commit and push changes under `saves/players/` if you want those character saves to appear on another PC.
+
+## Character Manager
+
+Run `start.bat` and choose **Manage Characters** while the game server is stopped. The manager can:
+
+- inspect character stats, position, inventory, and bank contents;
+- change any character password, including the configured administrator;
+- import, replace, clone, rename, back up, or delete saves;
+- edit skill levels or exact XP and move a character to exact coordinates; and
+- add, remove, or clear items in persistent inventory, bank, and worn containers.
+
+The manager validates save checksums, creates a recovery copy under the ignored `saves/backups/` directory before destructive changes, and regenerates the save checksum after structured edits. Character names come from the `.sav` filename; passwords are stored separately and never embedded in tracked save snapshots.
 
 ## Dependencies
 
