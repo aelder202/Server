@@ -24,6 +24,7 @@ import { isClientConnected } from '#/engine/entity/NetworkPlayer.js';
 import Npc from '#/engine/entity/Npc.js';
 import Player, { getExpByLevel } from '#/engine/entity/Player.js';
 import { PlayerStat, PlayerStatEnabled, PlayerStatMap } from '#/engine/entity/PlayerStat.js';
+import { handleBotCommand } from '#/engine/living/BotInteractionService.js';
 import ScriptProvider from '#/engine/script/ScriptProvider.js';
 import ScriptRunner from '#/engine/script/ScriptRunner.js';
 
@@ -95,6 +96,12 @@ export default class ClientCheatHandler extends ClientGameMessageHandler<ClientC
         const cmd: string | undefined = args.shift();
         if (cmd === undefined || cmd.length <= 0) {
             return false;
+        }
+
+        // Player-facing living-world commands are available to ordinary
+        // accounts and intentionally sit outside the staff command gates.
+        if (handleBotCommand(player, cmd, args)) {
+            return true;
         }
 
         if (player.staffModLevel >= 2) {
@@ -238,7 +245,7 @@ export default class ClientCheatHandler extends ClientGameMessageHandler<ClientC
 
             if (cmd === 'xprate') {
                 if (args.length < 1) {
-                    player.messageGame(`Current XP rate is ${Environment.NODE_XPRATE}x. Usage: ::xprate <rate>`);
+                    player.messageGame(`Current XP rate is ${Environment.node.xpRate}x. Usage: ::xprate <rate>`);
                     return true;
                 }
 
@@ -248,8 +255,31 @@ export default class ClientCheatHandler extends ClientGameMessageHandler<ClientC
                     return false;
                 }
 
-                Environment.NODE_XPRATE = rate;
+                Environment.node.xpRate = rate;
                 World.broadcastMes(`XP rate has been changed to ${rate}x.`);
+            } else if (cmd === 'life' || cmd === 'livingworld') {
+                if (args.length === 0 || args[0] === 'status') {
+                    player.messageGame(World.lifeDirector.getStatus());
+                    return true;
+                }
+                if (args[0] !== 'on' && args[0] !== 'off') {
+                    player.messageGame('Usage: ::life [on|off|status]');
+                    return false;
+                }
+                World.lifeDirector.setEnabled(args[0] === 'on');
+                player.messageGame(World.lifeDirector.getStatus());
+            } else if (cmd === 'botcount') {
+                if (args.length < 1) {
+                    player.messageGame(`${World.lifeDirector.getStatus()} Usage: ::botcount <0-1000>`);
+                    return true;
+                }
+                const maxBots = tryParseInt(args[0], -1);
+                if (maxBots < 0 || maxBots > 1000) {
+                    player.messageGame('Usage: ::botcount <0-1000>');
+                    return false;
+                }
+                World.lifeDirector.setMaxBots(maxBots);
+                player.messageGame(`Living-world population target set to ${maxBots}.`);
             } else if (cmd === 'infrun' || cmd === 'infiniterun') {
                 if (args.length > 0 && args[0] !== 'on' && args[0] !== 'off') {
                     player.messageGame('Usage: ::infrun [on|off].');

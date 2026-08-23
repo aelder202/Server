@@ -475,13 +475,13 @@ export default class WorldLifeDirector {
     private readonly store: BotProfileStore;
     private readonly active = new Map<string, SimulatedPlayer>();
     private readonly runtime = new Map<string, BotRuntime>();
-    private enabled = Environment.NODE_LIVING_WORLD;
+    private enabled = Environment.node.livingWorld.enabled;
     private nextManageTick = 0;
     private nextSaveTick = 0;
 
     constructor(world: LivingWorldHost) {
         this.world = world;
-        this.store = new BotProfileStore(Environment.NODE_LIVING_WORLD_PROFILE_DIR);
+        this.store = new BotProfileStore(Environment.node.livingWorld.profileDir);
     }
 
     setEnabled(enabled: boolean): void {
@@ -496,13 +496,18 @@ export default class WorldLifeDirector {
         }
     }
 
+    setMaxBots(maxBots: number): void {
+        Environment.node.livingWorld.maxBots = Math.max(0, Math.min(1000, Math.trunc(maxBots)));
+        this.nextManageTick = 0;
+    }
+
     saveNow(): void {
         this.saveActiveProfiles();
         this.store.saveAll();
     }
 
     getStatus(): string {
-        return `Living world ${this.enabled ? 'enabled' : 'disabled'}: ${this.active.size}/${Environment.NODE_LIVING_WORLD_MAX_BOTS} active bots.`;
+        return `Living world ${this.enabled ? 'enabled' : 'disabled'}: ${this.active.size}/${Environment.node.livingWorld.maxBots} active bots.`;
     }
 
     tick(): void {
@@ -527,7 +532,7 @@ export default class WorldLifeDirector {
         }
 
         for (const bot of [...this.active.values()]) {
-            if (!bot.isActive || distance(bot, anchor) > Environment.NODE_LIVING_WORLD_RADIUS + area.radius) {
+            if (!bot.isActive || distance(bot, anchor) > Environment.node.livingWorld.radius + area.radius) {
                 this.despawn(bot);
                 continue;
             }
@@ -563,7 +568,15 @@ export default class WorldLifeDirector {
     }
 
     private ensurePopulation(area: AreaDefinition, humanCount: number): void {
-        const desired = humanCount > 0 ? Environment.NODE_LIVING_WORLD_MAX_BOTS : 0;
+        const desired = humanCount > 0 ? Environment.node.livingWorld.maxBots : 0;
+
+        while (this.active.size > desired) {
+            const bot = this.active.values().next().value as SimulatedPlayer | undefined;
+            if (!bot) {
+                break;
+            }
+            this.despawn(bot);
+        }
 
         while (this.active.size < desired) {
             const activeIds = new Set(this.active.keys());

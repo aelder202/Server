@@ -10,6 +10,7 @@ data/config/
 dump/
 
 data/players/
+data/living-world/
 
 node_modules/
 

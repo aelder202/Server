@@ -9,6 +9,11 @@ import { trackLoginAttempts, trackLoginTime } from './LoginMetrics.js';
 
 const client = new LoginClient(Environment.node.id);
 
+function staffLevelFor(username: string): number {
+    const adminUsername = Environment.node.adminUsername.trim().toLowerCase();
+    return adminUsername.length > 0 && username.trim().toLowerCase() === adminUsername ? 4 : 0;
+}
+
 if (!parentPort) throw new Error('This file must be run as a worker thread.');
 
 parentPort.on('message', async msg => {
@@ -46,9 +51,9 @@ async function handleRequests(parentPort: ParentPort, msg: any) {
                 const stopTimer = trackLoginTime.startTimer();
                 const response = await client.playerLogin(username, password, uid, socket, remoteAddress, reconnecting, hasSave);
 
-                if (!Environment.node.production) {
-                    response.staffmodlevel = 4; // dev (destructive commands)
-                }
+                // Development mode must not make every local account an
+                // administrator. Only the configured username receives staff.
+                response.staffmodlevel = staffLevelFor(username);
 
                 parentPort.postMessage({
                     type: 'player_login',
@@ -60,11 +65,7 @@ async function handleRequests(parentPort: ParentPort, msg: any) {
                 });
                 stopTimer();
             } else {
-                let staffmodlevel = 0;
-
-                if (!Environment.node.production) {
-                    staffmodlevel = 4; // dev (destructive commands)
-                }
+                const staffmodlevel = staffLevelFor(username);
 
                 const profile = Environment.node.profile;
                 if (!fs.existsSync(`data/players/${profile}`)) {

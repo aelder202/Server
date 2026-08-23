@@ -29,6 +29,13 @@ export interface WorldConfig {
         clientRoutefinder: boolean;
         profile: string;
         maxConnected: number;
+        adminUsername: string;
+        livingWorld: {
+            enabled: boolean;
+            maxBots: number;
+            radius: number;
+            profileDir: string;
+        };
         debugProcChar: string;
         hopTime: number;
         rateLimitAddressLogin: number;
@@ -103,6 +110,13 @@ export function createDefaultWorldConfig(): WorldConfig {
             clientRoutefinder: true,
             profile: 'main',
             maxConnected: 1000,
+            adminUsername: 'mod',
+            livingWorld: {
+                enabled: true,
+                maxBots: 200,
+                radius: 192,
+                profileDir: 'data/living-world'
+            },
             debugProcChar: '~',
             hopTime: 45000,
             rateLimitAddressLogin: 30,
@@ -242,6 +256,11 @@ function migrateFromLegacyEnv(defaults: WorldConfig, env: Record<string, string>
     config.node.clientRoutefinder = tryParseBoolean(env.NODE_CLIENT_ROUTEFINDER, config.node.clientRoutefinder);
     config.node.profile = tryParseString(env.NODE_PROFILE, config.node.profile);
     config.node.maxConnected = tryParseInt(env.NODE_MAX_CONNECTED, config.node.maxConnected);
+    config.node.adminUsername = tryParseString(env.NODE_ADMIN_USERNAME, config.node.adminUsername);
+    config.node.livingWorld.enabled = tryParseBoolean(env.NODE_LIVING_WORLD, config.node.livingWorld.enabled);
+    config.node.livingWorld.maxBots = tryParseInt(env.NODE_LIVING_WORLD_MAX_BOTS, config.node.livingWorld.maxBots);
+    config.node.livingWorld.radius = tryParseInt(env.NODE_LIVING_WORLD_RADIUS, config.node.livingWorld.radius);
+    config.node.livingWorld.profileDir = tryParseString(env.NODE_LIVING_WORLD_PROFILE_DIR, config.node.livingWorld.profileDir);
     config.node.debugProcChar = tryParseString(env.NODE_DEBUGPROC_CHAR, config.node.debugProcChar);
     config.node.hopTime = tryParseInt(env.NODE_HOP_TIME, tryParseInt(env.NODE_MAX_NPCS, config.node.hopTime));
     config.node.rateLimitAddressLogin = tryParseInt(env.NODE_RATELIMIT_ADDRESS_LOGIN, config.node.rateLimitAddressLogin);

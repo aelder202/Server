@@ -3,6 +3,7 @@ import * as rsbuf from '#/network/rsbuf/index.js';
 import { Interaction } from '#/engine/entity/Interaction.js';
 import { NetworkPlayer } from '#/engine/entity/NetworkPlayer.js';
 import { isSimulatedPlayer } from '#/engine/entity/SimulatedPlayer.js';
+import { showBotStock, talkToBot } from '#/engine/living/BotInteractionService.js';
 import ServerTriggerType from '#/engine/script/ServerTriggerType.js';
 import World from '#/engine/World.js';
 import ClientGameMessageHandler from '#/network/game/client/ClientGameMessageHandler.js';
@@ -33,7 +34,12 @@ export default class OpPlayerHandler extends ClientGameMessageHandler<OpPlayer> 
         }
 
         if (isSimulatedPlayer(other)) {
-            player.messageGame(`${other.displayName} is busy with their own adventure.`);
+            player.clearPendingAction();
+            if (message.op === 4) {
+                showBotStock(player, other);
+            } else {
+                talkToBot(player, other);
+            }
             player.write(new UnsetMapFlag());
             return true;
         }

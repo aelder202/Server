@@ -46,7 +46,7 @@ export type BotProfile = {
 const PROFILE_FILE = 'profiles.json';
 const STAT_COUNT = 21;
 
-const DEFAULT_NAMES = [
+const CURATED_NAMES = [
     'ashwalker',
     'bronzemac',
     'cowhunter',
@@ -98,6 +98,21 @@ const DEFAULT_NAMES = [
     'willowwes',
     'marketmia'
 ];
+
+const NAME_PREFIXES = ['ash', 'amber', 'blue', 'brave', 'calm', 'dusk', 'ember', 'frost', 'gold', 'green', 'iron', 'jade', 'keen', 'mist', 'oak', 'red', 'rune', 'swift', 'wild', 'young'];
+const NAME_SUFFIXES = ['bear', 'birch', 'crow', 'finch', 'fox', 'hawk', 'ivy', 'lynx', 'miner', 'reed', 'smith', 'wolf', 'wren', 'yew', 'zinc'];
+
+function createDefaultNames(): string[] {
+    const names = new Set(CURATED_NAMES);
+    for (const prefix of NAME_PREFIXES) {
+        for (const suffix of NAME_SUFFIXES) {
+            names.add(`${prefix}${suffix}`);
+        }
+    }
+    return [...names];
+}
+
+const DEFAULT_NAMES = createDefaultNames();
 
 const ROLES = ['skiller', 'newbie', 'melee_low', 'ranger', 'smith', 'mage', 'guard_hunter', 'melee_mid', 'woodcutter', 'veteran'];
 
@@ -333,12 +348,30 @@ function defaultProfile(username: string, index: number): BotProfile {
         stats,
         levels,
         inventory: {},
-        bank: {},
+        bank: createStartingBank(index, role),
         activity: 'idle',
         goal: 'Looking for something to do',
         ticksActive: 0,
         lastSeenTick: 0
     };
+}
+
+function createStartingBank(index: number, role: string): BotItemStore {
+    const base = 12 + (index % 31);
+    const stockByRole: Record<string, BotItemStore> = {
+        skiller: { logs: base * 2, copper_ore: base },
+        newbie: { bones: base, raw_shrimps: Math.ceil(base / 2) },
+        melee_low: { bones: base * 2 },
+        ranger: { logs: base, unstrung_shortbow: Math.ceil(base / 3) },
+        smith: { copper_ore: base * 2, steel_knife: base },
+        mage: { blankrune: base * 2 },
+        guard_hunter: { bones: base * 2, steel_knife: Math.ceil(base / 2) },
+        melee_mid: { bones: base * 2 },
+        woodcutter: { logs: base * 3 },
+        veteran: { copper_ore: base, blankrune: base, vial_water: Math.ceil(base / 2) }
+    };
+
+    return { ...(stockByRole[role] ?? stockByRole.newbie) };
 }
 
 function normalizeItemStore(value: unknown): BotItemStore {
