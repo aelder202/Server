@@ -4,17 +4,17 @@ import path from 'node:path';
 import InvType from '#/cache/config/InvType.js';
 import ObjType from '#/cache/config/ObjType.js';
 import Player from '#/engine/entity/Player.js';
-import { WealthEventItem, WealthTransactionEvent } from '#/engine/entity/tracking/WealthEvent.js';
 import { WealthEventType } from '#/server/logger/WealthEventType.js';
 
 const MARKET_MESSAGE_PREFIX = '__BANK_MARKET__';
+const MARKET_ORIGIN = 'https://markets.lostcity.rs';
 const PRICE_HISTORY_SIZE = 5;
 const MIN_MARKET_TRADES = 3;
-const MAX_SEARCH_RESULTS = 40;
+const QUOTE_CACHE_MS = 10 * 60 * 1000;
 const MAX_TRANSACTION_AMOUNT = 10_000;
 const MAX_TRANSACTION_VALUE = 2_000_000_000;
 
-type PriceHistoryFile = Record<string, number[]>;
+type QuoteSource = 'market-sales' | 'market-value';
 
 type MarketQuote = {
     id: number;
@@ -22,16 +22,48 @@ type MarketQuote = {
     buyPrice: number;
     sellPrice: number;
     samples: number;
+    source: QuoteSource;
 };
 
-type ItemSide = {
-    coins: number;
-    items: WealthEventItem[];
+type RemoteItem = {
+    id: number;
+    game_id: number;
+    name: string;
+    slug: string;
+    cost: number;
+    isSet: boolean;
+};
+
+type RemoteOfferItem = {
+    quantity?: number;
+    item?: {
+        game_id?: number;
+    } | null;
+};
+
+type RemoteListing = {
+    price?: number | null;
+    soldAt?: string | null;
+    offers?: Array<{
+        items?: RemoteOfferItem[];
+    }>;
+};
+
+type StoredQuote = MarketQuote & {
+    fetchedAt: number;
+    marketId: number;
+    slug: string;
+    marketCost: number;
+};
+
+type MarketCacheFile = {
+    version: 1;
+    quotes: Record<string, StoredQuote>;
 };
 
 class BankMarketService {
-    private readonly historyPath: string = path.resolve('data/market/prices.json');
-    private readonly prices: Map<number, number[]> = new Map();
+    private readonly cachePath: string = path.resolve('data/market/market-cache.json');
+    private readonly quotes: Map<number, StoredQuote> = new Map();
 
     constructor() {
         this.load();
@@ -49,7 +81,7 @@ class BankMarketService {
 
         const action: string = args.shift() ?? 'search';
         if (action === 'search') {
-            this.search(player, args.join(' '));
+            void this.search(player, args.join(' '));
             return true;
         }
 
@@ -71,11 +103,8 @@ class BankMarketService {
             return true;
         }
 
-        if (action === 'buy') {
-            this.buy(player, type, amount);
-        } else {
-            this.sell(player, type, amount);
-        }
+        const transaction: Promise<void> = action === 'buy' ? this.buy(player, type, amount) : this.sell(player, type, amount);
+        void transaction.catch(() => this.notice(player, false, 'Lost City Markets could not provide a price. Try again in a moment.'));
         return true;
     }
 
@@ -83,66 +112,45 @@ class BankMarketService {
         this.send(player, { type: 'open' });
     }
 
-    recordPlayerTrade(event: WealthTransactionEvent): void {
-        if (event.event_type !== WealthEventType.TRADE || !event.recipient_items) {
-            return;
-        }
-
-        const coinsId: number = ObjType.getId('coins');
-        if (coinsId === -1) {
-            return;
-        }
-
-        const account: ItemSide = this.splitTradeSide(event.account_items, coinsId);
-        const recipient: ItemSide = this.splitTradeSide(event.recipient_items, coinsId);
-
-        if (account.coins > 0 && account.items.length === 0 && recipient.coins === 0 && recipient.items.length === 1) {
-            this.recordPrice(recipient.items[0], account.coins);
-        } else if (recipient.coins > 0 && recipient.items.length === 0 && account.coins === 0 && account.items.length === 1) {
-            this.recordPrice(account.items[0], recipient.coins);
-        }
-    }
-
-    private search(player: Player, rawQuery: string): void {
-        const query: string = rawQuery.trim().toLowerCase().slice(0, 48);
-        const matches: { quote: MarketQuote; rank: number }[] = [];
-
-        for (let id: number = 0; id < ObjType.count; id++) {
-            const type: ObjType | null = this.getTradeableItem(id);
-            if (!type) {
-                continue;
-            }
-
-            const name: string = type.name!.toLowerCase();
-            const debugname: string = type.debugname!.toLowerCase();
-            if (query && !name.includes(query) && !debugname.includes(query)) {
-                continue;
-            }
-
-            let rank: number = 3;
-            if (!query) {
-                rank = this.prices.has(id) ? 0 : 3;
-            } else if (name === query || debugname === query) {
-                rank = 0;
-            } else if (name.startsWith(query) || debugname.startsWith(query)) {
-                rank = 1;
-            } else {
-                rank = 2;
-            }
-            matches.push({ quote: this.quote(type), rank });
-        }
-
-        matches.sort((a, b) => a.rank - b.rank || b.quote.samples - a.quote.samples || a.quote.name.localeCompare(b.quote.name));
+    private async search(player: Player, rawQuery: string): Promise<void> {
+        const query: string = rawQuery.trim().slice(0, 48);
         this.send(player, { type: 'clear', query });
-        for (const match of matches.slice(0, MAX_SEARCH_RESULTS)) {
-            this.send(player, { type: 'result', ...match.quote });
+        if (!query) {
+            this.send(player, { type: 'done', count: 0, total: 0 });
+            return;
         }
-        this.send(player, { type: 'done', count: Math.min(matches.length, MAX_SEARCH_RESULTS), total: matches.length });
+
+        try {
+            const remoteItems: RemoteItem[] = await this.fetchItems(query);
+            const quoteTasks: Promise<MarketQuote>[] = [];
+            for (const remote of remoteItems) {
+                const type: ObjType | null = this.getTradeableItem(remote.game_id);
+                if (!type || remote.isSet) {
+                    continue;
+                }
+                quoteTasks.push(this.quote(type, remote));
+            }
+
+            const settled: PromiseSettledResult<MarketQuote>[] = await Promise.allSettled(quoteTasks);
+            const results: MarketQuote[] = settled
+                .filter((result): result is PromiseFulfilledResult<MarketQuote> => result.status === 'fulfilled')
+                .map(result => result.value);
+            if (quoteTasks.length > 0 && results.length === 0) {
+                throw new Error('Lost City Markets did not return any usable prices');
+            }
+
+            for (const quote of results) {
+                this.send(player, { type: 'result', ...quote });
+            }
+            this.send(player, { type: 'done', count: results.length, total: results.length });
+        } catch (_error) {
+            this.notice(player, false, 'Lost City Markets could not be reached. Try again in a moment.');
+        }
     }
 
-    private buy(player: Player, type: ObjType, requestedAmount: number): void {
+    private async buy(player: Player, type: ObjType, requestedAmount: number): Promise<void> {
         const coinsId: number = ObjType.getId('coins');
-        const price: number = this.quote(type).buyPrice;
+        const price: number = (await this.quoteForType(type)).buyPrice;
         const affordable: number = Math.floor(player.invTotal(InvType.INV, coinsId) / price);
         const amount: number = Math.min(requestedAmount, affordable);
         if (amount < 1) {
@@ -171,9 +179,9 @@ class BankMarketService {
         this.notice(player, true, `Bought ${added} x ${type.name} for ${total} coins.`);
     }
 
-    private sell(player: Player, type: ObjType, requestedAmount: number): void {
+    private async sell(player: Player, type: ObjType, requestedAmount: number): Promise<void> {
         const coinsId: number = ObjType.getId('coins');
-        const price: number = this.quote(type).sellPrice;
+        const price: number = (await this.quoteForType(type)).sellPrice;
         const amount: number = Math.min(requestedAmount, player.invTotal(InvType.INV, type.id));
         if (amount < 1) {
             this.notice(player, false, `You do not have any ${type.name} to sell.`);
@@ -207,18 +215,162 @@ class BankMarketService {
         this.notice(player, true, `Sold ${removed} x ${type.name} for ${value} coins.`);
     }
 
-    private quote(type: ObjType): MarketQuote {
-        const samples: number[] = this.prices.get(type.id) ?? [];
-        const marketPrice: number = samples.length >= MIN_MARKET_TRADES
-            ? Math.max(1, Math.round(samples.reduce((sum, price) => sum + price, 0) / samples.length))
-            : Math.max(1, type.cost);
+    private async quoteForType(type: ObjType): Promise<MarketQuote> {
+        const cached: StoredQuote | undefined = this.quotes.get(type.id);
+        if (cached) {
+            const remote: RemoteItem = {
+                id: cached.marketId,
+                game_id: type.id,
+                name: cached.name,
+                slug: cached.slug,
+                cost: cached.marketCost,
+                isSet: false
+            };
+            return this.quote(type, remote);
+        }
 
+        const matches: RemoteItem[] = await this.fetchItems(type.name ?? type.debugname ?? '');
+        const remote: RemoteItem | undefined = matches.find(item => item.game_id === type.id && !item.isSet);
+        if (!remote) {
+            throw new Error(`Item ${type.id} was not found on Lost City Markets`);
+        }
+        return this.quote(type, remote);
+    }
+
+    private async quote(type: ObjType, remote: RemoteItem): Promise<MarketQuote> {
+        const cached: StoredQuote | undefined = this.quotes.get(type.id);
+        if (cached && Date.now() - cached.fetchedAt < QUOTE_CACHE_MS) {
+            return this.publicQuote(cached);
+        }
+
+        try {
+            const listings: RemoteListing[] = await this.fetchSoldListings(remote.slug);
+            const prices: number[] = this.cleanSalePrices(listings);
+            const usesSales: boolean = prices.length >= MIN_MARKET_TRADES;
+            const marketPrice: number = usesSales
+                ? Math.round(prices.reduce((sum, price) => sum + price, 0) / prices.length)
+                : remote.cost;
+            const price: number = Math.max(1, Math.min(MAX_TRANSACTION_VALUE, marketPrice));
+            const stored: StoredQuote = {
+                id: type.id,
+                name: type.name!,
+                buyPrice: price,
+                sellPrice: price,
+                samples: prices.length,
+                source: usesSales ? 'market-sales' : 'market-value',
+                fetchedAt: Date.now(),
+                marketId: remote.id,
+                slug: remote.slug,
+                marketCost: remote.cost
+            };
+            this.quotes.set(type.id, stored);
+            this.save();
+            return this.publicQuote(stored);
+        } catch (error) {
+            if (cached) {
+                return this.publicQuote(cached);
+            }
+            throw error;
+        }
+    }
+
+    private async fetchItems(query: string): Promise<RemoteItem[]> {
+        const url: URL = new URL('/api/items', MARKET_ORIGIN);
+        url.searchParams.set('q', query);
+        url.searchParams.set('include_unlisted', 'true');
+        const response: Response = await this.marketFetch(url);
+        const data: unknown = await response.json();
+        if (!Array.isArray(data)) {
+            throw new Error('Unexpected Lost City Markets item response');
+        }
+
+        return data.filter((item): item is RemoteItem => {
+            if (!item || typeof item !== 'object') {
+                return false;
+            }
+            const candidate: Partial<RemoteItem> = item;
+            return Number.isSafeInteger(candidate.id) && Number.isSafeInteger(candidate.game_id) && typeof candidate.name === 'string' &&
+                typeof candidate.slug === 'string' && Number.isSafeInteger(candidate.cost) && typeof candidate.isSet === 'boolean';
+        });
+    }
+
+    private async fetchSoldListings(slug: string): Promise<RemoteListing[]> {
+        const response: Response = await this.marketFetch(new URL(`/items/${encodeURIComponent(slug)}`, MARKET_ORIGIN));
+        const html: string = await response.text();
+        const match: RegExpMatchArray | null = html.match(/data-page="([^"]+)"/);
+        if (!match) {
+            throw new Error('Lost City Markets item page did not contain price data');
+        }
+
+        const encoded: string = match[1]
+            .replaceAll('&quot;', '"')
+            .replaceAll('&#039;', "'")
+            .replaceAll('&#39;', "'")
+            .replaceAll('&apos;', "'")
+            .replaceAll('&lt;', '<')
+            .replaceAll('&gt;', '>')
+            .replaceAll('&amp;', '&');
+        const page: unknown = JSON.parse(encoded);
+        if (!page || typeof page !== 'object') {
+            throw new Error('Unexpected Lost City Markets item page');
+        }
+
+        const props: unknown = (page as { props?: unknown }).props;
+        const soldListings: unknown = props && typeof props === 'object' ? (props as { soldListings?: unknown }).soldListings : null;
+        const data: unknown = soldListings && typeof soldListings === 'object' ? (soldListings as { data?: unknown }).data : null;
+        if (!Array.isArray(data)) {
+            throw new Error('Lost City Markets item page did not contain completed sales');
+        }
+        return data as RemoteListing[];
+    }
+
+    private async marketFetch(url: URL): Promise<Response> {
+        const response: Response = await fetch(url, {
+            headers: {
+                accept: 'application/json, text/html;q=0.9',
+                'user-agent': 'LostCity-Local-Bank-Market/1.0'
+            },
+            signal: AbortSignal.timeout(8_000)
+        });
+        if (!response.ok) {
+            throw new Error(`Lost City Markets returned ${response.status}`);
+        }
+        return response;
+    }
+
+    private cleanSalePrices(listings: RemoteListing[]): number[] {
+        const prices: number[] = [];
+        for (const listing of listings) {
+            if (!listing.soldAt) {
+                continue;
+            }
+
+            let price: number | null = Number.isSafeInteger(listing.price) && (listing.price ?? 0) > 0 ? listing.price! : null;
+            if (price === null && listing.offers?.length === 1) {
+                const items: RemoteOfferItem[] = listing.offers[0].items ?? [];
+                if (items.length === 1 && items[0].item?.game_id === ObjType.getId('coins') && Number.isSafeInteger(items[0].quantity) && (items[0].quantity ?? 0) > 0) {
+                    price = items[0].quantity!;
+                }
+            }
+
+            if (price !== null) {
+                prices.push(price);
+                if (prices.length === PRICE_HISTORY_SIZE) {
+                    break;
+                }
+            }
+        }
+        return prices;
+    }
+
+    private publicQuote(quote: StoredQuote): MarketQuote {
         return {
-            id: type.id,
-            name: type.name!,
-            buyPrice: marketPrice,
-            sellPrice: marketPrice,
-            samples: samples.length
+            id: quote.id,
+            name: quote.name,
+            buyPrice: quote.buyPrice,
+            sellPrice: quote.sellPrice,
+            samples: quote.samples,
+            source: quote.source
         };
     }
 
@@ -234,56 +386,31 @@ class BankMarketService {
         return type;
     }
 
-    private splitTradeSide(items: WealthEventItem[], coinsId: number): ItemSide {
-        let coins: number = 0;
-        const tradeItems: WealthEventItem[] = [];
-        for (const item of items) {
-            if (item.id === coinsId || item.name === 'coins') {
-                coins += item.count;
-            } else if (item.id !== undefined && item.count > 0) {
-                tradeItems.push(item);
-            }
-        }
-        return { coins, items: tradeItems };
-    }
-
-    private recordPrice(item: WealthEventItem, coins: number): void {
-        if (item.id === undefined || item.count < 1 || coins < 1 || !this.getTradeableItem(item.id)) {
-            return;
-        }
-
-        const unitPrice: number = Math.max(1, Math.round(coins / item.count));
-        const samples: number[] = this.prices.get(item.id) ?? [];
-        samples.push(unitPrice);
-        if (samples.length > PRICE_HISTORY_SIZE) {
-            samples.splice(0, samples.length - PRICE_HISTORY_SIZE);
-        }
-        this.prices.set(item.id, samples);
-        this.save();
-    }
-
     private load(): void {
         try {
-            const data: PriceHistoryFile = JSON.parse(fs.readFileSync(this.historyPath, 'utf8'));
-            for (const [id, samples] of Object.entries(data)) {
+            const data: MarketCacheFile = JSON.parse(fs.readFileSync(this.cachePath, 'utf8'));
+            if (data.version !== 1 || !data.quotes) {
+                return;
+            }
+            for (const [id, quote] of Object.entries(data.quotes)) {
                 const objId: number = Number.parseInt(id, 10);
-                const valid: number[] = samples.filter(price => Number.isSafeInteger(price) && price > 0).slice(-PRICE_HISTORY_SIZE);
-                if (Number.isSafeInteger(objId) && valid.length > 0) {
-                    this.prices.set(objId, valid);
+                if (Number.isSafeInteger(objId) && quote.id === objId && quote.buyPrice > 0 && quote.sellPrice > 0 && quote.fetchedAt > 0) {
+                    this.quotes.set(objId, quote);
                 }
             }
         } catch (_error) {
-            // A fresh market intentionally starts with 2004 object values.
+            // The first successful Lost City Markets lookup creates the local cache.
         }
     }
 
     private save(): void {
-        const data: PriceHistoryFile = {};
-        for (const [id, samples] of this.prices) {
-            data[id] = samples;
+        const quotes: Record<string, StoredQuote> = {};
+        for (const [id, quote] of this.quotes) {
+            quotes[id] = quote;
         }
-        fs.mkdirSync(path.dirname(this.historyPath), { recursive: true });
-        fs.writeFileSync(this.historyPath, JSON.stringify(data, null, 2) + '\n');
+        const data: MarketCacheFile = { version: 1, quotes };
+        fs.mkdirSync(path.dirname(this.cachePath), { recursive: true });
+        fs.writeFileSync(this.cachePath, JSON.stringify(data, null, 2) + '\n');
     }
 
     private notice(player: Player, success: boolean, message: string): void {
