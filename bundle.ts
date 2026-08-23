@@ -129,7 +129,18 @@ async function applyTerser(script: BunOutput): Promise<boolean> {
                     'message',
                     'failCount',
                     'error',
-                    'id'
+                    'id',
+
+                    // server <-> Bank Market plugin protocol
+                    'name',
+                    'query',
+                    'buyPrice',
+                    'sellPrice',
+                    'samples',
+                    'source',
+                    'count',
+                    'total',
+                    'success'
                 ]
             }
         }
