@@ -53,6 +53,7 @@ export interface PluginClient {
     resetIdleLogoutDelayMs(): void;
     isChatInputRemappingAvailable(): boolean;
     getChatInputText(): string;
+    clearChatInput(): void;
     requestRedrawChatback(): void;
     clearCameraInput(): void;
 }
@@ -86,6 +87,10 @@ export class ClientPluginContext {
 
     getChatInputText(): string {
         return this.client.getChatInputText();
+    }
+
+    clearChatInput(): void {
+        this.client.clearChatInput();
     }
 
     requestRedrawChatback(): void {

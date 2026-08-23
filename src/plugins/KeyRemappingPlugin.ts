@@ -53,6 +53,7 @@ export default class KeyRemappingPlugin implements ClientPlugin {
             if (ch === KEY_ENTER && ctx.getChatInputText().length > 0) {
                 this.lockChat(ctx);
             } else if (ch === KEY_ESCAPE) {
+                ctx.clearChatInput();
                 this.lockChat(ctx);
                 return null;
             }

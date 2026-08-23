@@ -687,6 +687,11 @@ export class Client extends GameShell {
         return this.chatInput;
     }
 
+    clearChatInput(): void {
+        this.chatInput = '';
+        this.redrawChat = true;
+    }
+
     requestRedrawChatback(): void {
         this.redrawChat = true;
     }
@@ -2699,7 +2704,7 @@ export class Client extends GameShell {
             return;
         }
 
-        this.out.pIsaac(ClientProt.CLIENT_CHEAT);
+        this.out.p1Enc(ClientProt.CLIENT_CHEAT);
         this.out.p1(input.length - 2 + 1);
         this.out.pjstr(input.substring(2));
     }
