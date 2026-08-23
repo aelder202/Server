@@ -2651,6 +2651,10 @@ export class Client extends GameShell {
         const parts: string[] = text.split(/\s+/).filter(part => part.length > 0);
         const command: string = parts.shift()?.toLowerCase() ?? '';
 
+        if (command === 'pickpocket' || command === 'thief') {
+            return this.handlePickpocketCommand(parts);
+        }
+
         if (command === 'plugins') {
             const plugins: string = this.pluginManager
                 .summaries()
@@ -2686,6 +2690,27 @@ export class Client extends GameShell {
         }
 
         this.addChat(0, `${plugin.name}: ${enabled ? 'on' : 'off'}`, '');
+        return true;
+    }
+
+    private handlePickpocketCommand(parts: string[]): boolean {
+        const requestedMode: string = parts[0]?.toLowerCase() ?? 'toggle';
+        const mode: string | null = this.getPluginCommandMode(requestedMode);
+        if (parts.length > 1 || mode === null) {
+            this.addChat(0, 'Usage: ::pickpocket [on|off|toggle]', '');
+            return true;
+        }
+
+        let enabled: boolean | null;
+        if (mode === 'on' || mode === 'enable' || mode === 'enabled') {
+            enabled = this.pluginManager.setEnabled('pickpocket-left-click', true);
+        } else if (mode === 'off' || mode === 'disable' || mode === 'disabled') {
+            enabled = this.pluginManager.setEnabled('pickpocket-left-click', false);
+        } else {
+            enabled = this.pluginManager.toggle('pickpocket-left-click');
+        }
+
+        this.addChat(0, `Pickpocket left-click: ${enabled ? 'on' : 'off'}`, '');
         return true;
     }
 

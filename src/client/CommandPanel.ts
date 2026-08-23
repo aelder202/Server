@@ -19,6 +19,8 @@ const CLIENT_COMMANDS: CommandButton[] = [
     { label: 'List plugins', command: '::plugins', description: 'Show plugin states in chat.', mode: 'run' },
     { label: 'WASD camera on', command: `::plugin ${WASD_CAMERA_PLUGIN_ID} on`, description: 'Use WASD for the camera and Enter to focus chat.', mode: 'run', tags: ['camera', 'chat', 'qol'] },
     { label: 'WASD camera off', command: `::plugin ${WASD_CAMERA_PLUGIN_ID} off`, description: 'Restore the original always-ready chat controls.', mode: 'run', tags: ['camera', 'chat', 'qol'] },
+    { label: 'Pickpocket left-click on', command: '::pickpocket on', description: 'Make Pickpocket the left-click action whenever an NPC supports it.', mode: 'run', tags: ['thieving', 'thief', 'qol'] },
+    { label: 'Pickpocket left-click off', command: '::pickpocket off', description: 'Restore the original combat-level-based NPC action order.', mode: 'run', tags: ['thieving', 'thief', 'qol'] },
     { label: 'FPS on', command: '::fpson', description: 'Show the FPS counter.', mode: 'run' },
     { label: 'FPS off', command: '::fpsoff', description: 'Hide the FPS counter.', mode: 'run' },
     { label: 'Set FPS target', command: '::fps <target>', description: 'Set the client target framerate.', mode: 'fill' },
@@ -118,7 +120,7 @@ const STAFF_COMMANDS: CommandButton[] = [
     ...SERVER_COMMANDS.filter(item => !SERVER_TELEPORT_COMMANDS.includes(item))
 ];
 const COMMON_COMMANDS: CommandButton[] = [
-    ...CLIENT_COMMANDS.filter(item => ['::plugins', '::fpson', '::fpsoff', '::fps <target>'].includes(item.command) || item.command.startsWith(`::plugin ${WASD_CAMERA_PLUGIN_ID}`)),
+    ...CLIENT_COMMANDS.filter(item => ['::plugins', '::fpson', '::fpsoff', '::fps <target>', '::pickpocket on', '::pickpocket off'].includes(item.command) || item.command.startsWith(`::plugin ${WASD_CAMERA_PLUGIN_ID}`)),
     ...SERVER_COMMANDS.filter(item => ['::botstock', '::botbuy <item> <amount>', '::getcoord', '::teles', '::telefav <name>', '::tele <level,mapX,mapZ[,tileX,tileZ]>'].includes(item.command)),
     ...TELEPORT_FAVORITES.filter(item => COMMON_TELEPORTS.has(item.label))
 ];
