@@ -11,6 +11,10 @@ import MouseTracking from '#/client/MouseTracking.js';
 import Skill from '#/client/Skill.js';
 import TitleFlames from '#/client/TitleFlames.js';
 
+import PluginManager from '#/plugins/PluginManager.js';
+import { ClientPluginContext, type LocalPlayerPluginState, type MenuEntry, type ScreenPoint } from '#/plugins/PluginApi.js';
+import { createDefaultPlugins } from '#/plugins/defaultPlugins.js';
+
 import FloType from '#/config/FloType.js';
 import SeqType, { PostanimMove, PreanimMove, RestartMode } from '#/config/SeqType.js';
 import LocType from '#/config/LocType.js';
@@ -74,6 +78,8 @@ import WordPack from '#/wordfilter/WordPack.js';
 import JagFX from '#/sound/JagFX.js';
 
 const CLIENT_VERSION = 274;
+const DEFAULT_IDLE_LOGOUT_DELAY_MS = 90_000;
+const MAX_IDLE_LOGOUT_DELAY_MS = 24 * 60 * 60 * 1000;
 
 const MAX_PLAYER_COUNT = 2048;
 const LOCAL_PLAYER_INDEX = 2047;
@@ -136,6 +142,9 @@ export class Client extends GameShell {
             Client.levelExperience[i] = (acc / 4) | 0;
         }
     }
+
+    private readonly pluginContext: ClientPluginContext = new ClientPluginContext(this);
+    private readonly pluginManager: PluginManager = new PluginManager(this.pluginContext);
 
     private alreadyStarted: boolean = false;
     private errorStarted: boolean = false;
@@ -1408,6 +1417,14 @@ export class Client extends GameShell {
 
         this.unloadTitle();
         this.drawArea = null;
+    }
+
+    protected override remapKeyDown(ch: number, event: KeyboardEvent): number | null {
+        return this.pluginManager.onKeyDown(ch, event);
+    }
+
+    protected override remapKeyUp(ch: number, event: KeyboardEvent): number | null {
+        return this.pluginManager.onKeyUp(ch, event);
     }
 
     // ----
@@ -3339,39 +3356,8 @@ export class Client extends GameShell {
                         }
 
                         if ((key === 13 || key === 10) && this.chatInput.length > 0) {
-                            if (this.staffmodlevel === 2) {
-                                if (this.chatInput === '::clientdrop') {
-                                    await this.lostCon();
-                                } else if (this.chatInput === '::prefetchmusic') {
-                                    if (this.onDemand) {
-                                        for (let i = 0; i < this.onDemand.getFileCount(2); i++) {
-                                            await this.onDemand.prefetchPriority(2, i, 1);
-                                        }
-                                    }
-                                } else if (this.chatInput === '::lag') {
-                                    this.lag();
-                                }
-                            }
-
-                            // custom: player-facing commands
-                            if (this.chatInput === '::fpson') {
-                                // authentic in later revs
-                                this.showFps = true;
-                            } else if (this.chatInput === '::fpsoff') {
-                                // authentic in later revs
-                                this.showFps = false;
-                            } else if (this.chatInput.startsWith('::fps ')) {
-                                // authentic in later revs
-                                try {
-                                    const desiredFps = parseInt(this.chatInput.substring(6)) || 50;
-                                    this.setTargetedFramerate(desiredFps);
-                                } catch (_e) {
-                                    // empty
-                                }
-                            } else if (this.chatInput.startsWith('::')) {
-                                this.out.p1Enc(ClientProt.CLIENT_CHEAT);
-                                this.out.p1(this.chatInput.length - 2 + 1);
-                                this.out.pjstr(this.chatInput.substring(2));
+                            if (await this.submitChatCommand(this.chatInput)) {
+                                // handled locally or sent as a :: command
                             } else {
                                 let colour: number = 0;
                                 if (this.chatInput.startsWith('yellow:')) {
@@ -4530,6 +4516,7 @@ export class Client extends GameShell {
         this.coordArrow();
         this.textureRunAnims(cycle);
         this.otherOverlays();
+        this.pluginManager.onDrawOverlay();
         this.areaGame?.draw(4, 4);
 
         this.camX = camX;
@@ -11945,7 +11932,7 @@ export class Client extends GameShell {
             this.mouseX = x;
             this.mouseY = y;
 
-            if (this.insideViewportArea() && !this.isViewportObscured()) {
+            if (this.insideGame() && !this.isGameObscured()) {
                 e.preventDefault();
                 this.startMouseCameraDrag(e.screenX | 0, e.screenY | 0);
                 return;
@@ -12174,6 +12161,99 @@ export class Client extends GameShell {
         }
     }
 
+    override windowMouseUp(e: MouseEvent) {
+        if (this.mouseCameraDragging) {
+            e.preventDefault();
+            this.stopMouseCameraDrag();
+        }
+    }
+
+    override windowMouseMove(e: MouseEvent) {
+        if (this.mouseCameraDragging) {
+            e.preventDefault();
+            this.updateMouseCameraDrag(e.screenX | 0, e.screenY | 0);
+        }
+    }
+
+    override mouseWheel(x: number, y: number, e: WheelEvent) {
+        this.idleTimer = performance.now();
+        this.mouseX = x;
+        this.mouseY = y;
+
+        if (this.insideMinimapArea()) {
+            e.preventDefault();
+            this.adjustMinimapZoom(e);
+            return;
+        }
+
+        if (!this.insideGame() || this.isGameObscured()) {
+            return;
+        }
+
+        e.preventDefault();
+        if (e.deltaY === 0) {
+            return;
+        }
+
+        this.orbitCameraZoom += Math.sign(e.deltaY) * 96;
+        this.orbitCameraZoom = Math.max(-450, Math.min(900, this.orbitCameraZoom));
+    }
+
+    override touchStart(e: TouchEvent) {
+        if (e.touches.length < 2 || this.dragging) {
+            e.preventDefault();
+        }
+    }
+
+    private startMouseCameraDrag(x: number, y: number): void {
+        this.mouseCameraDragging = true;
+        this.mouseCameraX = x;
+        this.mouseCameraY = y;
+        this.mouseButton = 0;
+        this.nextMouseClickX = -1;
+        this.nextMouseClickY = -1;
+        this.nextMouseClickButton = 0;
+    }
+
+    private stopMouseCameraDrag(): void {
+        this.mouseCameraDragging = false;
+        this.mouseButton = 0;
+        this.nextMouseClickX = -1;
+        this.nextMouseClickY = -1;
+        this.nextMouseClickButton = 0;
+    }
+
+    private updateMouseCameraDrag(x: number, y: number): void {
+        const dx: number = x - this.mouseCameraX;
+        const dy: number = y - this.mouseCameraY;
+
+        this.mouseCameraX = x;
+        this.mouseCameraY = y;
+        if (dx === 0 && dy === 0) {
+            return;
+        }
+
+        this.idleTimer = performance.now();
+        this.orbitCameraYaw = (this.orbitCameraYaw - dx * 3) & 0x7ff;
+        this.orbitCameraPitch = Math.max(128, Math.min(383, this.orbitCameraPitch + dy * 2));
+        this.orbitCameraYawVelocity = 0;
+        this.orbitCameraPitchVelocity = 0;
+        this.sendCamera = true;
+    }
+
+    private adjustMinimapZoom(e: WheelEvent): void {
+        if (e.deltaY === 0) {
+            return;
+        }
+
+        this.minimapZoomOffset += Math.sign(e.deltaY) * 32;
+        this.minimapZoomOffset = Math.max(-96, Math.min(384, this.minimapZoomOffset));
+    }
+
+    private getMinimapZoom(): number {
+        return Math.max(128, Math.min(768, this.macroMinimapZoom + this.minimapZoomOffset + 256));
+    }
+
     private exceedsGrabThreshold(size: number) {
         return Math.abs(this.sx - this.nx) > size || Math.abs(this.sy - this.ny) > size;
     }
@@ -12199,6 +12279,14 @@ export class Client extends GameShell {
         const y1: number = 205;
         const x2: number = x1 + 190;
         const y2: number = y1 + 261;
+        return this.ingame && this.mouseX >= x1 && this.mouseX <= x2 && this.mouseY >= y1 && this.mouseY <= y2;
+    }
+
+    private insideMinimapArea() {
+        const x1: number = 575;
+        const y1: number = 8;
+        const x2: number = x1 + 146;
+        const y2: number = y1 + 151;
         return this.ingame && this.mouseX >= x1 && this.mouseX <= x2 && this.mouseY >= y1 && this.mouseY <= y2;
     }
 

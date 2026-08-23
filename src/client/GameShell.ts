@@ -473,6 +473,15 @@ export default abstract class GameShell {
             ch = 10;
         }
 
+        const mapped: number | null = this.remapKeyDown(ch, e);
+        if (mapped === null) {
+            if (!CanvasEnabledKeys.includes(e.key)) {
+                e.preventDefault();
+            }
+            return;
+        }
+        ch = mapped;
+
         if (ch > 0 && ch < 128) {
             this.keyHeld[ch] = 1;
         }
@@ -532,6 +541,15 @@ export default abstract class GameShell {
         } else if (keyCode.code === 10) {
             ch = 10;
         }
+
+        const mapped: number | null = this.remapKeyUp(ch, e);
+        if (mapped === null) {
+            if (!CanvasEnabledKeys.includes(e.key)) {
+                e.preventDefault();
+            }
+            return;
+        }
+        ch = mapped;
 
         if (ch > 0 && ch < 128) {
             this.keyHeld[ch] = 0;

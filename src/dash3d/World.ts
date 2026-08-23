@@ -119,7 +119,7 @@ export default class World {
     static groundX: number = -1;
     static groundZ: number = -1;
 
-    private static visBacking: boolean[][][][] = new TypedArray4d(8, 32, 51, 51, false);
+    private static visBacking: boolean[][][][] = new TypedArray4d(8, 32, VISIBILITY_MAP_SIZE, VISIBILITY_MAP_SIZE, false);
     private static visBackingDirty: boolean[][] | null = null;
 
     static numActiveOccluders: number = 0;
@@ -869,7 +869,7 @@ export default class World {
         this.xOrig = (viewportWidth / 2) | 0;
         this.yOrig = (viewportHeight / 2) | 0;
 
-        const visBacking: boolean[][][][] = new TypedArray4d(9, 32, 53, 53, false);
+        const visBacking: boolean[][][][] = new TypedArray4d(9, 32, VISIBILITY_TEMP_SIZE, VISIBILITY_TEMP_SIZE, false);
         for (let pitch: number = 128; pitch <= 384; pitch += 32) {
             for (let yaw: number = 0; yaw < 2048; yaw += 64) {
                 this.cameraSinX = Pix3D.sinTable[pitch];
@@ -892,7 +892,7 @@ export default class World {
                             }
                         }
 
-                        visBacking[pitchLevel][yawLevel][dx + 25 + 1][dz + 25 + 1] = visible;
+                        visBacking[pitchLevel][yawLevel][dx + RENDER_DISTANCE + 1][dz + RENDER_DISTANCE + 1] = visible;
                     }
                 }
             }
@@ -906,29 +906,29 @@ export default class World {
 
                         check_areas: for (let dx: number = -1; dx <= 1; dx++) {
                             for (let dz: number = -1; dz <= 1; dz++) {
-                                if (visBacking[pitchLevel][yawLevel][x + dx + 25 + 1][z + dz + 25 + 1]) {
+                                if (visBacking[pitchLevel][yawLevel][x + dx + RENDER_DISTANCE + 1][z + dz + RENDER_DISTANCE + 1]) {
                                     visible = true;
                                     break check_areas;
                                 }
 
-                                if (visBacking[pitchLevel][(yawLevel + 1) % 31][x + dx + 25 + 1][z + dz + 25 + 1]) {
+                                if (visBacking[pitchLevel][(yawLevel + 1) % 32][x + dx + RENDER_DISTANCE + 1][z + dz + RENDER_DISTANCE + 1]) {
                                     visible = true;
                                     break check_areas;
                                 }
 
-                                if (visBacking[pitchLevel + 1][yawLevel][x + dx + 25 + 1][z + dz + 25 + 1]) {
+                                if (visBacking[pitchLevel + 1][yawLevel][x + dx + RENDER_DISTANCE + 1][z + dz + RENDER_DISTANCE + 1]) {
                                     visible = true;
                                     break check_areas;
                                 }
 
-                                if (visBacking[pitchLevel + 1][(yawLevel + 1) % 31][x + dx + 25 + 1][z + dz + 25 + 1]) {
+                                if (visBacking[pitchLevel + 1][(yawLevel + 1) % 32][x + dx + RENDER_DISTANCE + 1][z + dz + RENDER_DISTANCE + 1]) {
                                     visible = true;
                                     break check_areas;
                                 }
                             }
                         }
 
-                        this.visBacking[pitchLevel][yawLevel][x + 25][z + 25] = visible;
+                        this.visBacking[pitchLevel][yawLevel][x + RENDER_DISTANCE][z + RENDER_DISTANCE] = visible;
                     }
                 }
             }
@@ -1017,7 +1017,7 @@ export default class World {
                         continue;
                     }
 
-                    if (tile.drawLevel <= maxLevel && (World.visBackingDirty[x + 25 - World.gx][z + 25 - World.gz] || this.groundh[level][x][z] - eyeY >= 2000)) {
+                    if (tile.drawLevel <= maxLevel && (World.visBackingDirty[x + RENDER_DISTANCE - World.gx][z + RENDER_DISTANCE - World.gz] || this.groundh[level][x][z] - eyeY >= 2000)) {
                         tile.drawFront = true;
                         tile.drawBack = true;
                         tile.drawSprites = tile.spriteCount > 0;
@@ -1033,7 +1033,7 @@ export default class World {
 
         for (let level: number = this.minLevel; level < this.maxTileLevel; level++) {
             const tiles: (Square | null)[][] = this.squares[level];
-            for (let dx: number = -25; dx <= 0; dx++) {
+            for (let dx: number = -RENDER_DISTANCE; dx <= 0; dx++) {
                 const rightTileX: number = World.gx + dx;
                 const leftTileX: number = World.gx - dx;
 
@@ -1088,7 +1088,7 @@ export default class World {
 
         for (let level: number = this.minLevel; level < this.maxTileLevel; level++) {
             const tiles: (Square | null)[][] = this.squares[level];
-            for (let dx: number = -25; dx <= 0; dx++) {
+            for (let dx: number = -RENDER_DISTANCE; dx <= 0; dx++) {
                 const rightTileX: number = World.gx + dx;
                 const leftTileX: number = World.gx - dx;
 

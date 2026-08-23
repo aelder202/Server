@@ -6,7 +6,10 @@ import { LocShape } from '#/dash3d/LocShape.js';
 // a standard build area is 4x13x13 zones, or 4x104x104 tiles
 export const enum BuildArea {
     LEVELS = 4,
-    SIZE = 13 << 3
+    RADIUS_ZONES = 6,
+    ZONES = RADIUS_ZONES * 2 + 1,
+    SIZE = ZONES << 3,
+    MINIMAP_PADDING = 48
 }
 
 export default class CollisionMap {

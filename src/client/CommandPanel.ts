@@ -24,6 +24,8 @@ const CLIENT_COMMANDS: CommandButton[] = [
 ];
 
 const SERVER_COMMANDS: CommandButton[] = [
+    { label: 'Bot stock', command: '::botstock', description: 'Refresh the nearby adventurer bot resource list.', mode: 'run', tags: ['living world'] },
+    { label: 'Buy from bot', command: '::botbuy <item> <amount>', description: 'Buy gathered resources from the adventurer bot you traded with.', mode: 'fill', tags: ['living world'] },
     { label: 'Get coord', command: '::getcoord', description: 'Display your current coordinate.', mode: 'fill', tags: ['staff 2'] },
     { label: 'Teleport list', command: '::teles', description: 'Show teleport favorites.', mode: 'fill', tags: ['staff 2'] },
     { label: 'Teleport favorite', command: '::telefav <name>', description: 'Teleport to a named favorite.', mode: 'fill', tags: ['staff 2'] },
@@ -36,6 +38,8 @@ const SERVER_COMMANDS: CommandButton[] = [
     { label: 'Mute', command: '::mute <username> <minutes>', description: 'Temporarily mute a player.', mode: 'fill', tags: ['staff 2', 'production'] },
     { label: 'Kick', command: '::kick <username>', description: 'Kick a player from the game.', mode: 'fill', tags: ['staff 2', 'production'] },
     { label: 'XP rate', command: '::xprate <rate>', description: 'Set the world XP multiplier.', mode: 'fill', tags: ['staff 3'] },
+    { label: 'Living world', command: '::life [on|off|status]', description: 'Enable, disable, or inspect adventurer bots.', mode: 'fill', tags: ['staff 3', 'living world'] },
+    { label: 'Bot population', command: '::botcount <0-1000>', description: 'Set the active adventurer bot population target.', mode: 'fill', tags: ['staff 3', 'living world'] },
     { label: 'Infinite run', command: '::infrun [on|off]', description: 'Toggle infinite run energy.', mode: 'fill', tags: ['staff 3'] },
     { label: 'Infinite run alias', command: '::infiniterun [on|off]', description: 'Toggle infinite run energy.', mode: 'fill', tags: ['staff 3'] },
     { label: 'God mode', command: '::god [on|off]', description: 'Toggle god mode.', mode: 'fill', tags: ['staff 3'] },
@@ -111,7 +115,7 @@ const STAFF_COMMANDS: CommandButton[] = [
 ];
 const COMMON_COMMANDS: CommandButton[] = [
     ...CLIENT_COMMANDS.filter(item => ['::plugins', '::fpson', '::fpsoff', '::fps <target>'].includes(item.command)),
-    ...SERVER_COMMANDS.filter(item => ['::getcoord', '::teles', '::telefav <name>', '::tele <level,mapX,mapZ[,tileX,tileZ]>'].includes(item.command)),
+    ...SERVER_COMMANDS.filter(item => ['::botstock', '::botbuy <item> <amount>', '::getcoord', '::teles', '::telefav <name>', '::tele <level,mapX,mapZ[,tileX,tileZ]>'].includes(item.command)),
     ...TELEPORT_FAVORITES.filter(item => COMMON_TELEPORTS.has(item.label))
 ];
 const SEARCH_COMMANDS: CommandButton[] = [...CLIENT_COMMANDS, ...SERVER_COMMANDS, ...TELEPORT_FAVORITES, ...DEBUG_SCRIPT_COMMANDS];
