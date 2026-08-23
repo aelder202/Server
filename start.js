@@ -126,7 +126,9 @@ function startEngine() {
     ensureEngineDependencies();
 
     try {
-        child_process.execSync('bun run src/app.ts', {
+        // Revision 274 uses Node's built-in sqlite module, so execute through
+        // Node/tsx rather than the Bun runtime used only for dependency setup.
+        child_process.execSync('npm run quickstart', {
             stdio: 'inherit',
             cwd: 'engine'
         });

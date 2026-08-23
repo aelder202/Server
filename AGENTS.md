@@ -5,10 +5,10 @@ This is a launcher repository that manages several nested Git repositories. It i
 ## Repository Layout
 
 - Root repository: `https://github.com/aelder202/Server.git`, branch `main`.
-- `engine/`: nested Git repository for server code. In this forked setup it is cloned from `https://github.com/aelder202/Server.git`, branch `engine-254`.
-- `webclient/`: nested Git repository for TypeScript client code. In this forked setup it is cloned from `https://github.com/aelder202/Server.git`, branch `webclient-254`.
-- `content/`: nested upstream LostCityRS content repository for revision `254`.
-- `javaclient/`: nested upstream LostCityRS Java client repository for revision `254`.
+- `engine/`: nested Git repository for server code. In this forked setup it is cloned from `https://github.com/aelder202/Server.git`, branch `engine-274`.
+- `webclient/`: nested Git repository for TypeScript client code. In this forked setup it is cloned from `https://github.com/aelder202/Server.git`, branch `webclient-274`.
+- `content/`: nested upstream LostCityRS content repository for revision `274`.
+- `javaclient/`: nested upstream LostCityRS Java client repository for revision `274`.
 
 `server.json` is tracked intentionally. It tells `start.js` which nested repository URL and branch to clone for modified components. Do not re-ignore `server.json`.
 
@@ -42,13 +42,13 @@ git -C engine branch -vv
 git -C webclient branch -vv
 ```
 
-Local branch names may differ on old workspaces, but engine changes must push to `origin/engine-254` and webclient changes must push to `origin/webclient-254`.
+Local branch names may differ on old workspaces, but engine changes must push to `origin/engine-274` and webclient changes must push to `origin/webclient-274`.
 
 ## Where To Commit
 
 - Root launcher/config changes (`start.js`, `server.json`, root `.gitignore`, `start.bat`, `README.md`, this file): commit from the root repo and push to `main`.
-- Server changes under `engine/`: commit from inside `engine/` and push to `origin/engine-254`.
-- Web client changes under `webclient/`: commit from inside `webclient/` and push to `origin/webclient-254`.
+- Server changes under `engine/`: commit from inside `engine/` and push to `origin/engine-274`.
+- Web client changes under `webclient/`: commit from inside `webclient/` and push to `origin/webclient-274`.
 - Avoid flattening `engine/`, `webclient/`, `content/`, or `javaclient/` into the root repo. They are intentionally ignored at the root level because they are nested Git repositories.
 
 ## Web Client Build Coupling

@@ -21,6 +21,12 @@ Once your setup process has completed, wait for it to tell you the world has sta
 
 You can press `ctrl + c` to cancel/quit out of a terminal process.
 
+## This Modded World
+
+This workspace targets revision 274 and includes a zoomable extended-distance web client, configurable XP rates, a single configured administrator account (`mod` by default), and a persistent living world of up to 200 simulated adventurers. Adventurer bots travel, skill, chat, bank their gathered resources, and sell those resources when you use the normal **Trade with** player option. After inspecting a bot's stock, use `::botbuy <item> <amount>` to purchase and `::botstock` to refresh the offer.
+
+Runtime settings live in the ignored `engine/data/config/world.json` file. In particular, `node.adminUsername`, `node.xpRate`, and `node.livingWorld` control the administrator, XP multiplier, and bot population without rebuilding the code.
+
 ## Character Saves
 
 This fork keeps portable character saves in `saves/players/` so they can move with the launcher repo. On first startup, `start.js` restores that snapshot into `engine/data/players/` if the engine save folder is empty. When the server stops, `start.js` refreshes `saves/players/` from the live engine saves.
