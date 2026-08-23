@@ -7,7 +7,9 @@ import RebuildNormal from '#/network/game/server/model/RebuildNormal.js';
 export const BUILD_AREA_RADIUS_ZONES = 6;
 export const BUILD_AREA_SIZE = (BUILD_AREA_RADIUS_ZONES * 2 + 1) << 3;
 const BUILD_AREA_REBUILD_RADIUS_ZONES = 4;
-const ACTIVE_ZONE_RADIUS = 3;
+// Keep dynamic ground objects and location changes available throughout the
+// full client build area so an extended camera does not reveal stale scenery.
+const ACTIVE_ZONE_RADIUS = BUILD_AREA_RADIUS_ZONES;
 
 export default class BuildArea {
     // constructor
