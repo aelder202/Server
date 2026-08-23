@@ -50,6 +50,7 @@ import { PlayerLoading } from '#/engine/entity/PlayerLoading.js';
 import { EntityQueueState, PlayerQueueType } from '#/engine/entity/PlayerQueueRequest.js';
 import { PlayerStat } from '#/engine/entity/PlayerStat.js';
 import SimulatedPlayer, { isSimulatedPlayer } from '#/engine/entity/SimulatedPlayer.js';
+import { bankMarketService } from '#/engine/market/BankMarketService.js';
 import { SessionLog } from '#/engine/entity/tracking/SessionLog.js';
 import { WealthTransactionEvent, WealthEvent } from '#/engine/entity/tracking/WealthEvent.js';
 import GameMap, { changeLocCollision, changeNpcCollision, changeBlockCollision, changePlayerOccCollision } from '#/engine/GameMap.js';
@@ -2368,6 +2369,8 @@ class World {
             timestamp: Date.now(),
             ...event
         };
+
+        bankMarketService.recordPlayerTrade(transaction);
 
         if (!groupedEventTypes.includes(event.event_type)) {
             this.wealthTransactions.push(transaction);

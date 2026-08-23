@@ -24,7 +24,7 @@ import { isClientConnected } from '#/engine/entity/NetworkPlayer.js';
 import Npc from '#/engine/entity/Npc.js';
 import Player, { getExpByLevel } from '#/engine/entity/Player.js';
 import { PlayerStat, PlayerStatEnabled, PlayerStatMap } from '#/engine/entity/PlayerStat.js';
-import { handleBotCommand } from '#/engine/living/BotInteractionService.js';
+import { bankMarketService } from '#/engine/market/BankMarketService.js';
 import ScriptProvider from '#/engine/script/ScriptProvider.js';
 import ScriptRunner from '#/engine/script/ScriptRunner.js';
 
@@ -98,9 +98,9 @@ export default class ClientCheatHandler extends ClientGameMessageHandler<ClientC
             return false;
         }
 
-        // Player-facing living-world commands are available to ordinary
-        // accounts and intentionally sit outside the staff command gates.
-        if (handleBotCommand(player, cmd, args)) {
+        // The bank market is available to every account and intentionally sits
+        // outside the staff command gates. Its commands are sent by the client UI.
+        if (bankMarketService.handleCommand(player, cmd, args)) {
             return true;
         }
 
