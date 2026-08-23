@@ -1,5 +1,9 @@
 @echo off
 
+rem Always run relative commands from the launcher directory, even when this
+rem batch file is invoked by its full path from another PowerShell directory.
+cd /d "%~dp0"
+
 where /q git
 if errorlevel 1 (
     echo You must install Git to proceed: https://git-scm.com
