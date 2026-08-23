@@ -27,6 +27,12 @@ This workspace targets revision 274 and includes a zoomable extended-distance we
 
 Runtime settings live in the ignored `engine/data/config/world.json` file. In particular, `node.adminUsername`, `node.adminPasswordHash`, `node.xpRate`, and `node.livingWorld` control the protected administrator, XP multiplier, and bot population without rebuilding the code. The administrator password is checked only for the configured administrator name; normal local accounts always receive staff level 0.
 
+## Tailnet Access
+
+Tailscale Serve exposes the running game to connected tailnet devices at `https://lc.tail4b7602.ts.net/`. HTTPS and secure WebSocket traffic are proxied to the game server on `http://127.0.0.1:80`; this is tailnet-only and is not a public Funnel.
+
+The Serve configuration persists, but the game server must be running. After a reboot, run `start.bat` and select **Start Server**. Inspect or disable the proxy from an elevated terminal with `tailscale serve status` or `tailscale serve --https=443 off`.
+
 ## Character Saves
 
 This fork keeps portable character saves in `saves/players/` so they can move with the launcher repo. On first startup, `start.js` restores that snapshot into `engine/data/players/` if the engine save folder is empty. When the server stops, `start.js` refreshes `saves/players/` from the live engine saves.
