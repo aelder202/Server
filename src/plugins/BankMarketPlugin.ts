@@ -12,6 +12,7 @@ type MarketResult = {
     buyPrice: number;
     sellPrice: number;
     samples: number;
+    source: 'market-sales' | 'market-value';
 };
 
 type MarketPayload =
@@ -136,7 +137,7 @@ export default class BankMarketPlugin implements ClientPlugin {
                     <input type="search" data-market-search placeholder="Search all tradeable items…" maxlength="48" aria-label="Search market items">
                     <input type="number" data-market-amount min="1" max="${MAX_AMOUNT}" value="1" aria-label="Trade amount">
                 </div>
-                <div class="market-help">Prices use the last five direct player trades after three sales are recorded; until then they use the original 2004 item value.</div>
+                <div class="market-help">Prices come from completed trades on markets.lostcity.rs. The newest five clean coin sales are averaged once at least three exist.</div>
                 <div class="market-status" aria-live="polite">Search for an item to begin.</div>
                 <div class="market-results"></div>
             </section>
@@ -225,7 +226,11 @@ export default class BankMarketPlugin implements ClientPlugin {
             return;
         }
         if (payload.type === 'done') {
-            this.setStatus(payload.total > payload.count ? `Showing ${payload.count} of ${payload.total} matches. Refine your search for more.` : `${payload.count} item${payload.count === 1 ? '' : 's'} found.`);
+            if (!this.currentQuery) {
+                this.setStatus('Type an item name to search Lost City Markets.');
+            } else {
+                this.setStatus(payload.total > payload.count ? `Showing ${payload.count} of ${payload.total} matches. Refine your search for more.` : `${payload.count} item${payload.count === 1 ? '' : 's'} found.`);
+            }
             return;
         }
         if (payload.type === 'notice') {
@@ -244,7 +249,9 @@ export default class BankMarketPlugin implements ClientPlugin {
         this.resultCount++;
         const row: HTMLDivElement = document.createElement('div');
         row.className = 'market-row';
-        const source: string = result.samples >= 3 ? `average of ${result.samples} recent trades` : `2004 value · ${result.samples}/3 trades recorded`;
+        const source: string = result.source === 'market-sales'
+            ? `Lost City Markets · average of ${result.samples} completed sales`
+            : `Lost City Markets item value · ${result.samples}/3 clean sales`;
         row.innerHTML = `
             <div class="market-name"></div>
             <div class="market-price">Buy: ${this.formatCoins(result.buyPrice)} gp</div>
