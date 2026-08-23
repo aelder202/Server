@@ -11,6 +11,7 @@ dump/
 
 data/players/
 data/living-world/
+data/*.log
 
 node_modules/
 
