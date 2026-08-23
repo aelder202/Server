@@ -703,6 +703,19 @@ export class Client extends GameShell {
         this.keyHeld[4] = 0;
     }
 
+    adjustExtendedCameraZoom(deltaY: number): void {
+        if (deltaY === 0) {
+            return;
+        }
+
+        this.orbitCameraZoom += Math.sign(deltaY) * 192;
+        this.orbitCameraZoom = Math.max(-1400, Math.min(4400, this.orbitCameraZoom));
+    }
+
+    resetCameraZoom(): void {
+        this.orbitCameraZoom = 0;
+    }
+
     static setLowMem(): void {
         World.lowMem = true;
         Pix3D.lowMem = true;
@@ -4487,7 +4500,7 @@ export class Client extends GameShell {
             const yaw: number = (this.orbitCameraYaw + this.macroCameraAngle) & 0x7ff;
 
             if (this.localPlayer) {
-                const distance: number = Math.max(550, Math.min(2600, pitch * 3 + 600 + this.orbitCameraZoom));
+                const distance: number = Math.max(300, Math.min(5200, pitch * 3 + 600 + this.orbitCameraZoom));
                 this.camFollow(pitch, yaw, this.orbitCameraX, this.getAvH(this.localPlayer.x, this.localPlayer.z, this.minusedlevel) - 50, this.orbitCameraZ, distance);
             }
         }
@@ -12220,8 +12233,12 @@ export class Client extends GameShell {
             return;
         }
 
-        e.preventDefault();
         if (e.deltaY === 0) {
+            return;
+        }
+
+        e.preventDefault();
+        if (this.pluginManager.onMouseWheel(e)) {
             return;
         }
 
@@ -12229,7 +12246,7 @@ export class Client extends GameShell {
         this.orbitCameraZoom = Math.max(-450, Math.min(900, this.orbitCameraZoom));
     }
 
-    override touchStart(e: TouchEvent) {
+    touchStart(e: TouchEvent) {
         if (e.touches.length < 2 || this.dragging) {
             e.preventDefault();
         }

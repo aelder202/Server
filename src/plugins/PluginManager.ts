@@ -149,6 +149,25 @@ export default class PluginManager {
         return this.mapKey(ch, event, (plugin, input) => plugin.onKeyUp?.(this.ctx, input, event));
     }
 
+    onMouseWheel(event: WheelEvent): boolean {
+        let handled: boolean = false;
+        for (const plugin of this.plugins.values()) {
+            if (!plugin.enabled || !plugin.started || !plugin.plugin.onMouseWheel) {
+                continue;
+            }
+
+            try {
+                if (plugin.plugin.onMouseWheel(this.ctx, event) === true) {
+                    handled = true;
+                }
+            } catch (e) {
+                console.warn(`Plugin ${plugin.plugin.id} failed in mouse wheel handler`, e);
+            }
+        }
+
+        return handled;
+    }
+
     getChatInputHint(): string | null {
         for (const plugin of this.plugins.values()) {
             if (!plugin.enabled || !plugin.started || !plugin.plugin.getChatInputHint) {

@@ -425,9 +425,8 @@ export default abstract class GameShell {
     }
 
     private onwheel(e: WheelEvent) {
-        const { x, y } = this.getMousePos(e);
-
-        this.mouseWheel(x, y, e);
+        this.getMousePos(e);
+        this.mouseWheel(this.absMouseX, this.absMouseY, e);
     }
 
     protected mouseWheel(_x: number, _y: number, _e: WheelEvent) {
