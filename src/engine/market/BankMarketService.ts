@@ -158,7 +158,8 @@ class BankMarketService {
             return;
         }
 
-        const added: number = player.invAdd(InvType.INV, type.id, amount);
+        const deliveryType: ObjType = this.getNotedVariant(type) ?? type;
+        const added: number = player.invAdd(InvType.INV, deliveryType.id, amount);
         if (added < 1) {
             this.notice(player, false, 'You do not have enough inventory space.');
             return;
@@ -166,23 +167,27 @@ class BankMarketService {
 
         const total: number = added * price;
         if (total > MAX_TRANSACTION_VALUE || player.invDel(InvType.INV, coinsId, total) !== total) {
-            player.invDel(InvType.INV, type.id, added);
+            player.invDel(InvType.INV, deliveryType.id, added);
             this.notice(player, false, 'The purchase could not be completed.');
             return;
         }
 
         player.addWealthEvent({
             event_type: WealthEventType.SHOP_BUY,
-            account_items: [{ id: type.id, name: type.debugname, count: added }],
+            account_items: [{ id: deliveryType.id, name: deliveryType.debugname, count: added }],
             account_value: total
         });
-        this.notice(player, true, `Bought ${added} x ${type.name} for ${total} coins.`);
+        const noted: string = deliveryType.id === type.id ? '' : ' (noted)';
+        this.notice(player, true, `Bought ${added} x ${type.name}${noted} for ${total} coins.`);
     }
 
     private async sell(player: Player, type: ObjType, requestedAmount: number): Promise<void> {
         const coinsId: number = ObjType.getId('coins');
         const price: number = (await this.quoteForType(type)).sellPrice;
-        const amount: number = Math.min(requestedAmount, player.invTotal(InvType.INV, type.id));
+        const notedType: ObjType | null = this.getNotedVariant(type);
+        const notedAvailable: number = notedType ? player.invTotal(InvType.INV, notedType.id) : 0;
+        const normalAvailable: number = player.invTotal(InvType.INV, type.id);
+        const amount: number = Math.min(requestedAmount, notedAvailable + normalAvailable);
         if (amount < 1) {
             this.notice(player, false, `You do not have any ${type.name} to sell.`);
             return;
@@ -194,7 +199,10 @@ class BankMarketService {
             return;
         }
 
-        const removed: number = player.invDel(InvType.INV, type.id, amount);
+        const notedToRemove: number = Math.min(amount, notedAvailable);
+        const notedRemoved: number = notedType && notedToRemove > 0 ? player.invDel(InvType.INV, notedType.id, notedToRemove) : 0;
+        const normalRemoved: number = player.invDel(InvType.INV, type.id, amount - notedRemoved);
+        const removed: number = notedRemoved + normalRemoved;
         if (removed < 1) {
             this.notice(player, false, 'The sale could not be completed.');
             return;
@@ -202,14 +210,26 @@ class BankMarketService {
 
         const value: number = removed * price;
         if (player.invAdd(InvType.INV, coinsId, value) !== value) {
-            player.invAdd(InvType.INV, type.id, removed);
+            if (notedType && notedRemoved > 0) {
+                player.invAdd(InvType.INV, notedType.id, notedRemoved);
+            }
+            if (normalRemoved > 0) {
+                player.invAdd(InvType.INV, type.id, normalRemoved);
+            }
             this.notice(player, false, 'You do not have enough inventory space for the coins.');
             return;
         }
 
+        const accountItems: Array<{ id: number; name: string | null; count: number }> = [];
+        if (notedType && notedRemoved > 0) {
+            accountItems.push({ id: notedType.id, name: notedType.debugname, count: notedRemoved });
+        }
+        if (normalRemoved > 0) {
+            accountItems.push({ id: type.id, name: type.debugname, count: normalRemoved });
+        }
         player.addWealthEvent({
             event_type: WealthEventType.SHOP_SELL,
-            account_items: [{ id: type.id, name: type.debugname, count: removed }],
+            account_items: accountItems,
             account_value: value
         });
         this.notice(player, true, `Sold ${removed} x ${type.name} for ${value} coins.`);
@@ -384,6 +404,18 @@ class BankMarketService {
             return null;
         }
         return type;
+    }
+
+    private getNotedVariant(type: ObjType): ObjType | null {
+        if (type.certtemplate !== -1 || type.certlink < 0 || type.certlink >= ObjType.count) {
+            return null;
+        }
+
+        const noted: ObjType = ObjType.get(type.certlink);
+        if (noted.certtemplate === -1 || noted.certlink !== type.id || !noted.tradeable) {
+            return null;
+        }
+        return noted;
     }
 
     private load(): void {
