@@ -1,9 +1,21 @@
-import SeqType from '#/cache/config/SeqType.js';
+import CategoryType from '#/cache/config/CategoryType.js';
+import Component from '#/cache/config/Component.js';
+import InvType from '#/cache/config/InvType.js';
+import LocType from '#/cache/config/LocType.js';
+import NpcType from '#/cache/config/NpcType.js';
+import ObjType from '#/cache/config/ObjType.js';
 import { CoordGrid } from '#/engine/CoordGrid.js';
+import GameMap, { findPath, isMapBlocked } from '#/engine/GameMap.js';
+import { Interaction } from '#/engine/entity/Interaction.js';
+import Loc from '#/engine/entity/Loc.js';
+import Npc from '#/engine/entity/Npc.js';
 import { PlayerStat } from '#/engine/entity/PlayerStat.js';
 import SimulatedPlayer from '#/engine/entity/SimulatedPlayer.js';
-import { findPath, isIndoors, isMapBlocked } from '#/engine/GameMap.js';
-import BotProfileStore, { BotItemStore, BotProfile, LivingWorldActivity } from '#/engine/living/BotProfileStore.js';
+import BotProfileStore, { BotItemStore, LivingWorldActivity } from '#/engine/living/BotProfileStore.js';
+import ScriptProvider from '#/engine/script/ScriptProvider.js';
+import ScriptRunner from '#/engine/script/ScriptRunner.js';
+import ScriptState from '#/engine/script/ScriptState.js';
+import ServerTriggerType from '#/engine/script/ServerTriggerType.js';
 import Environment from '#/util/Environment.js';
 
 type Coord = { level: number; x: number; z: number };
@@ -47,10 +59,14 @@ type BotRuntime = {
     lastProgressTick: number;
     lastX: number;
     lastZ: number;
+    target: Loc | Npc | null;
+    op: number;
+    useItem: string | null;
 };
 
 type LivingWorldHost = {
     currentTick: number;
+    gameMap: GameMap;
     addSimulatedPlayer(player: SimulatedPlayer): boolean;
     removeSimulatedPlayer(player: SimulatedPlayer): void;
 };
@@ -415,21 +431,21 @@ function createTownArea(id: string, name: string, center: Coord, bank: Coord, in
     const industryActivity: ActivityDefinition =
         industry === 'fishing'
             ? {
-                  id: 'fishing',
-                  label: `Fishing near ${name}`,
-                  spots: resourceSpots,
-                  stat: PlayerStat.FISHING,
-                  xp: 120,
-                  product: 'raw_shrimps',
-                  maxInventory: 20,
-                  actionTicks: [9, 17],
-                  actionLoops: [3, 8],
-                  anims: ['human_smallnet'],
-                  chats: [`Fishing near ${name}.`, 'Another load for the bank.', 'These should sell.'],
-                  weight: 6
-              }
+                id: 'fishing',
+                label: `Fishing near ${name}`,
+                spots: resourceSpots,
+                stat: PlayerStat.FISHING,
+                xp: 120,
+                product: 'raw_shrimps',
+                maxInventory: 20,
+                actionTicks: [9, 17],
+                actionLoops: [3, 8],
+                anims: ['human_smallnet'],
+                chats: [`Fishing near ${name}.`, 'Another load for the bank.', 'These should sell.'],
+                weight: 6
+            }
             : industry === 'mining'
-              ? {
+                ? {
                     id: 'mining',
                     label: `Mining near ${name}`,
                     spots: resourceSpots,
@@ -443,7 +459,7 @@ function createTownArea(id: string, name: string, center: Coord, bank: Coord, in
                     chats: [`Mining near ${name}.`, 'Banking after this load.', 'Ore prices are decent.'],
                     weight: 6
                 }
-              : {
+                : {
                     id: 'woodcutting',
                     label: `Chopping trees near ${name}`,
                     spots: resourceSpots,
@@ -503,8 +519,26 @@ const SEERS = createTownArea('seers', "Seers' Village", { level: 0, x: 2732, z: 
 const ARDOUGNE = createTownArea('ardougne', 'Ardougne', { level: 0, x: 2663, z: 3302 }, { level: 0, x: 2616, z: 3332 }, 'woodcutting');
 const BRIMHAVEN = createTownArea('brimhaven', 'Brimhaven', { level: 0, x: 2802, z: 3177 }, { level: 0, x: 2802, z: 3177 }, 'fishing');
 const RIMMINGTON = createTownArea('rimmington', 'Rimmington', { level: 0, x: 2956, z: 3210 }, { level: 0, x: 2956, z: 3210 }, 'mining');
+const GNOME_COURSE = createTownArea('gnome_course', 'the Gnome Stronghold', { level: 0, x: 2474, z: 3437 }, { level: 0, x: 2449, z: 3482 }, 'woodcutting');
+const AIR_ALTAR: AreaDefinition = {
+    id: 'air_altar',
+    center: { level: 0, x: 2841, z: 4830 },
+    radius: 32,
+    bank: { level: 0, x: 2841, z: 4830 },
+    safePoints: [
+        { level: 0, x: 2841, z: 4830 },
+        { level: 0, x: 2843, z: 4831 },
+        { level: 0, x: 2839, z: 4829 }
+    ],
+    spawnPoints: [
+        { level: 0, x: 2841, z: 4830 },
+        { level: 0, x: 2843, z: 4831 },
+        { level: 0, x: 2839, z: 4829 }
+    ],
+    activities: []
+};
 
-const AREAS: AreaDefinition[] = [LUMBRIDGE, VARROCK, FALADOR, DRAYNOR, PORT_SARIM, AL_KHARID, SEERS, ARDOUGNE, BRIMHAVEN, RIMMINGTON];
+const AREAS: AreaDefinition[] = [LUMBRIDGE, VARROCK, FALADOR, DRAYNOR, PORT_SARIM, AL_KHARID, SEERS, ARDOUGNE, BRIMHAVEN, RIMMINGTON, GNOME_COURSE, AIR_ALTAR];
 
 const BANKING_ACTIVITY: ActivityDefinition = {
     id: 'banking',
@@ -516,6 +550,189 @@ const BANKING_ACTIVITY: ActivityDefinition = {
     chats: ['Banking this load.', 'Need to clear my inventory.', 'Back in a minute.']
 };
 
+const SHARED_ACTIVITIES: ActivityDefinition[] = [
+    {
+        id: 'woodcutting',
+        label: 'Chopping a nearby tree',
+        spots: [],
+        stat: PlayerStat.WOODCUTTING,
+        actionTicks: [5, 10],
+        actionLoops: [2, 6],
+        anims: [],
+        chats: ['A few more logs.', 'Then back to the bank.'],
+        weight: 7
+    },
+    {
+        id: 'fishing',
+        label: 'Fishing at a nearby spot',
+        spots: [],
+        stat: PlayerStat.FISHING,
+        actionTicks: [6, 12],
+        actionLoops: [2, 6],
+        anims: [],
+        chats: ['One more catch.', 'This spot is busy.'],
+        weight: 6
+    },
+    {
+        id: 'mining',
+        label: 'Mining a nearby rock',
+        spots: [],
+        stat: PlayerStat.MINING,
+        actionTicks: [5, 10],
+        actionLoops: [2, 6],
+        anims: [],
+        chats: ['Looking for ore.', 'This rock should respawn soon.'],
+        weight: 6
+    },
+    {
+        id: 'combat',
+        label: 'Fighting a nearby creature',
+        spots: [],
+        stat: PlayerStat.ATTACK,
+        actionTicks: [5, 10],
+        actionLoops: [1, 4],
+        anims: [],
+        chats: ['Training combat.', 'I should watch my health.'],
+        weight: 6
+    },
+    {
+        id: 'thieving',
+        label: 'Looking for something to steal',
+        spots: [],
+        stat: PlayerStat.THIEVING,
+        actionTicks: [5, 10],
+        actionLoops: [2, 5],
+        anims: [],
+        chats: ['Nobody saw that.', 'Just one more.'],
+        weight: 5
+    },
+    {
+        id: 'cooking',
+        label: 'Cooking a catch',
+        spots: [],
+        stat: PlayerStat.COOKING,
+        actionTicks: [5, 10],
+        actionLoops: [2, 5],
+        anims: [],
+        chats: ['Hope this one does not burn.', 'Fresh from the fishing spot.'],
+        weight: 4
+    },
+    {
+        id: 'smithing',
+        label: 'Smithing at an anvil',
+        spots: [],
+        stat: PlayerStat.SMITHING,
+        actionTicks: [5, 10],
+        actionLoops: [2, 5],
+        anims: [],
+        chats: ['A few more bars.', 'Making something useful.'],
+        weight: 4
+    },
+    {
+        id: 'firemaking',
+        label: 'Lighting logs',
+        spots: [],
+        stat: PlayerStat.FIREMAKING,
+        actionTicks: [5, 9],
+        actionLoops: [2, 5],
+        anims: [],
+        chats: ['This should catch.', 'Making a proper fire line.'],
+        weight: 4
+    },
+    {
+        id: 'fletching',
+        label: 'Fletching logs at the bank',
+        spots: [],
+        stat: PlayerStat.FLETCHING,
+        actionTicks: [5, 10],
+        actionLoops: [2, 5],
+        anims: [],
+        chats: ['Cutting these into bows.', 'Fletching this whole load.'],
+        weight: 5
+    },
+    {
+        id: 'prayer',
+        label: 'Burying bones',
+        spots: [],
+        stat: PlayerStat.PRAYER,
+        actionTicks: [4, 8],
+        actionLoops: [2, 6],
+        anims: [],
+        chats: ['Saving these bones for Prayer.', 'One bone at a time.'],
+        weight: 3
+    },
+    {
+        id: 'agility',
+        label: 'Training on an agility obstacle',
+        spots: [],
+        stat: PlayerStat.AGILITY,
+        actionTicks: [5, 10],
+        actionLoops: [1, 3],
+        anims: [],
+        chats: ['Nearly made that cleanly.', 'Another lap.'],
+        weight: 3
+    },
+    {
+        id: 'crafting',
+        label: 'Crafting leather at the bank',
+        spots: [],
+        stat: PlayerStat.CRAFTING,
+        actionTicks: [5, 10],
+        actionLoops: [2, 5],
+        anims: [],
+        chats: ['Making a few leather pieces.', 'I brought plenty of thread.'],
+        weight: 4
+    },
+    {
+        id: 'herblore',
+        label: 'Mixing potions at the bank',
+        spots: [],
+        stat: PlayerStat.HERBLORE,
+        actionTicks: [5, 10],
+        actionLoops: [2, 5],
+        anims: [],
+        chats: ['Mixing another potion.', 'Careful with the ingredients.'],
+        weight: 4
+    },
+    {
+        id: 'runecraft',
+        label: 'Binding rune essence',
+        spots: [],
+        stat: PlayerStat.RUNECRAFT,
+        actionTicks: [5, 10],
+        actionLoops: [1, 3],
+        anims: [],
+        chats: ['Binding this essence.', 'Another altar trip.'],
+        weight: 5
+    },
+    {
+        id: 'travelling',
+        label: 'Walking through town',
+        spots: [],
+        actionTicks: [4, 9],
+        actionLoops: [1, 2],
+        anims: [],
+        chats: ['Running errands.', 'Heading across town.'],
+        weight: 2
+    }
+];
+
+const BANK_KEEP_ITEMS = new Set(['bronze_axe', 'bronze_pickaxe', 'net', 'fishing_rod', 'fly_fishing_rod', 'lobster_pot', 'harpoon', 'fishing_bait', 'feather', 'tinderbox', 'knife', 'hammer', 'needle', 'thread']);
+
+const ACTIVITY_SUPPLIES: Partial<Record<LivingWorldActivity, BotItemStore>> = {
+    woodcutting: { bronze_axe: 1 },
+    fishing: { net: 1 },
+    mining: { bronze_pickaxe: 1 },
+    cooking: { raw_shrimp: 12 },
+    smithing: { hammer: 1, bronze_bar: 12 },
+    firemaking: { tinderbox: 1, logs: 12 },
+    fletching: { knife: 1, logs: 12 },
+    prayer: { bones: 12 },
+    crafting: { needle: 1, thread: 20, leather: 12 },
+    herblore: { vial_water: 12, guam_leaf: 12, eye_of_newt: 12 },
+    runecraft: { blankrune: 24 }
+};
+
 function randomOf<T>(items: T[]): T {
     return items[Math.trunc(Math.random() * items.length)];
 }
@@ -524,46 +741,12 @@ function randomDelay([min, max]: [number, number]): number {
     return min + Math.trunc(Math.random() * (max - min + 1));
 }
 
-function totalItems(store: BotItemStore): number {
-    return Object.values(store).reduce((total, count) => total + count, 0);
-}
-
-function addItem(store: BotItemStore, item: string, count: number): void {
-    store[item] = (store[item] ?? 0) + count;
-}
-
-function removeItem(store: BotItemStore, item: string, count: number): void {
-    const next = (store[item] ?? 0) - count;
-    if (next > 0) {
-        store[item] = next;
-    } else {
-        delete store[item];
-    }
-}
-
-function consumeItems(store: BotItemStore, consumes: BotItemStore | undefined): void {
-    if (!consumes) {
-        return;
-    }
-
-    for (const [item, count] of Object.entries(consumes)) {
-        removeItem(store, item, count);
-    }
-}
-
-function moveAllItems(from: BotItemStore, to: BotItemStore): void {
-    for (const [item, count] of Object.entries(from)) {
-        addItem(to, item, count);
-        delete from[item];
-    }
-}
-
 function distance(a: { x: number; z: number }, b: { x: number; z: number }): number {
     return Math.max(Math.abs(a.x - b.x), Math.abs(a.z - b.z));
 }
 
-function seq(name: string): number {
-    return SeqType.getId(name);
+function optionIndex(options: (string | null)[] | null, pattern: RegExp): number {
+    return options?.findIndex(option => option !== null && pattern.test(option)) ?? -1;
 }
 
 function weightedActivity(activities: ActivityDefinition[]): ActivityDefinition {
@@ -587,6 +770,8 @@ export default class WorldLifeDirector {
     private readonly store: BotProfileStore;
     private readonly active = new Map<string, SimulatedPlayer>();
     private readonly runtime = new Map<string, BotRuntime>();
+    private readonly locCatalog = new Map<string, Loc[]>();
+    private readonly npcCatalog = new Map<string, Npc[]>();
     private enabled = Environment.node.livingWorld.enabled;
     private nextManageTick = 0;
     private nextSaveTick = 0;
@@ -642,8 +827,17 @@ export default class WorldLifeDirector {
                 runtime = this.createRuntime(bot, area);
                 this.runtime.set(bot.profile.id, runtime);
             }
+            if (!runtime) {
+                continue;
+            }
 
-            const area = AREAS.find(candidate => candidate.id === runtime.areaId) ?? this.nearestArea(bot);
+            const runtimeAreaId = runtime.areaId;
+            let area = AREAS.find(candidate => candidate.id === runtimeAreaId) ?? this.nearestArea(bot);
+            if (bot.level !== area.center.level || distance(bot, area.center) > area.radius + 64) {
+                area = this.nearestArea(bot);
+                runtime = this.createRuntime(bot, area);
+                this.runtime.set(bot.profile.id, runtime);
+            }
             bot.touch(this.world.currentTick);
             this.tickBot(bot, area);
         }
@@ -717,6 +911,7 @@ export default class WorldLifeDirector {
                 if (!this.world.addSimulatedPlayer(bot)) {
                     return;
                 }
+                this.initializeBotScripts(bot);
 
                 if (Math.random() < 0.35) {
                     bot.say(randomOf(['Hello.', 'Anyone training here?', 'Busy world today.', 'Back to work.']));
@@ -730,12 +925,12 @@ export default class WorldLifeDirector {
     }
 
     private createRuntime(bot: SimulatedPlayer, area: AreaDefinition): BotRuntime {
-        const activity = this.chooseActivity(bot.profile, area);
+        const activity = this.chooseActivity(bot, area);
         const destination = this.destinationFor(activity, area);
         bot.profile.activity = activity.id;
         bot.profile.goal = activity.label;
 
-        return {
+        const runtime: BotRuntime = {
             areaId: area.id,
             activity,
             destination,
@@ -747,20 +942,27 @@ export default class WorldLifeDirector {
             lastDistance: distance(bot, destination),
             lastProgressTick: this.world.currentTick,
             lastX: bot.x,
-            lastZ: bot.z
+            lastZ: bot.z,
+            target: null,
+            op: -1,
+            useItem: null
         };
+        this.retargetRuntime(bot, runtime, area);
+        return runtime;
     }
 
-    private chooseActivity(profile: BotProfile, area: AreaDefinition): ActivityDefinition {
-        if (totalItems(profile.inventory) >= 24) {
+    private chooseActivity(bot: SimulatedPlayer, area: AreaDefinition): ActivityDefinition {
+        const inventory = bot.getInventory(InvType.INV);
+        if (inventory && inventory.freeSlotCount <= 2) {
             return BANKING_ACTIVITY;
         }
 
-        return weightedActivity(area.activities);
+        const candidates = SHARED_ACTIVITIES.filter(activity => this.canRunActivity(bot, activity, area));
+        return weightedActivity(candidates.length > 0 ? candidates : [SHARED_ACTIVITIES[SHARED_ACTIVITIES.length - 1]]);
     }
 
     private destinationFor(activity: ActivityDefinition, area: AreaDefinition): Coord {
-        const spots = activity.id === 'banking' ? [area.bank, ...area.safePoints] : activity.spots;
+        const spots = activity.id === 'banking' || activity.id === 'fletching' ? [area.bank, ...area.safePoints] : activity.spots.length > 0 ? activity.spots : area.safePoints;
         const candidates = spots.filter(spot => this.isUsableDestination(spot, area));
 
         if (candidates.length > 0) {
@@ -779,7 +981,7 @@ export default class WorldLifeDirector {
             return false;
         }
 
-        return !isIndoors(spot.x, spot.z, spot.level);
+        return true;
     }
 
     private queuePathTo(bot: SimulatedPlayer, destination: Coord): boolean {
@@ -812,55 +1014,46 @@ export default class WorldLifeDirector {
             this.runtime.set(bot.profile.id, runtime);
         }
 
-        const currentDistance = distance(bot, runtime.destination);
-        const moved = runtime.lastX !== bot.x || runtime.lastZ !== bot.z;
-        const progressed = moved || currentDistance < runtime.lastDistance;
-
-        if (progressed) {
-            runtime.stuckTicks = 0;
-            runtime.pathFailures = 0;
-            runtime.lastProgressTick = this.world.currentTick;
-        } else if (bot.hasWaypoints()) {
-            runtime.stuckTicks++;
-        }
-
-        runtime.lastX = bot.x;
-        runtime.lastZ = bot.z;
-        runtime.lastDistance = currentDistance;
-
-        if (bot.level !== runtime.destination.level) {
-            this.recoverBot(bot, runtime, area);
+        if (this.handleBotDialog(bot)) {
             return;
         }
 
-        if (!this.isUsableDestination(runtime.destination, area)) {
-            this.recoverBot(bot, runtime, area);
+        if (runtime.activity.id === 'banking' && bot.containsModalInterface()) {
+            this.performBanking(bot, runtime, area);
+            return;
+        }
+        if (bot.containsModalInterface() && this.handleSkillInterface(bot, runtime, area)) {
             return;
         }
 
-        if (currentDistance > 1) {
-            if (!bot.hasWaypoints()) {
-                if (!this.queuePathTo(bot, runtime.destination)) {
-                    this.recoverBot(bot, runtime, area);
-                }
-            } else if (runtime.stuckTicks >= 6 || this.world.currentTick - runtime.lastProgressTick > 20) {
-                bot.clearWaypoints();
-                if (this.queuePathTo(bot, runtime.destination)) {
-                    runtime.stuckTicks = 0;
-                } else {
-                    this.recoverBot(bot, runtime, area);
-                }
+        if (bot.delayed || bot.protect || bot.activeScript || bot.hasInteraction() || bot.hasWaypoints()) {
+            return;
+        }
+
+        const inventory = bot.getInventory(InvType.INV);
+        if (runtime.activity.id !== 'banking' && inventory && inventory.freeSlotCount <= 1 && runtime.activity.id !== 'firemaking' && runtime.activity.id !== 'fletching' && runtime.activity.id !== 'prayer') {
+            this.switchToBanking(bot, runtime, area);
+            return;
+        }
+        if (runtime.activity.id !== 'banking' && !this.hasInventorySupplies(bot, runtime.activity)) {
+            this.switchToBanking(bot, runtime, area);
+            return;
+        }
+
+        if (runtime.target && !this.targetMatches(bot, runtime.activity, runtime.target)) {
+            this.finishActivity(bot, runtime, area);
+            return;
+        }
+
+        const currentDistance = distance(bot, runtime.target ?? runtime.destination);
+        if (!runtime.target && currentDistance > 1) {
+            if (!this.queuePathTo(bot, runtime.destination)) {
+                this.recoverBot(bot, runtime, area);
             }
             return;
         }
-
-        runtime.recoveryCount = 0;
-        runtime.pathFailures = 0;
 
         if (this.world.currentTick < runtime.nextActionTick) {
-            if (Math.random() < 0.01) {
-                bot.faceSquare(runtime.destination.x, runtime.destination.z);
-            }
             return;
         }
 
@@ -868,56 +1061,548 @@ export default class WorldLifeDirector {
     }
 
     private performActivity(bot: SimulatedPlayer, runtime: BotRuntime, area: AreaDefinition): void {
-        const profile = bot.profile;
-
-        if (runtime.activity.id === 'banking') {
-            moveAllItems(profile.inventory, profile.bank);
-            if (Math.random() < 0.7) {
-                bot.say(randomOf(runtime.activity.chats));
-            }
+        if (runtime.actionsRemaining <= 0) {
             this.finishActivity(bot, runtime, area);
             return;
         }
 
-        this.playActivityAnimation(bot, runtime.activity);
-        consumeItems(profile.inventory, runtime.activity.consumes);
+        if (runtime.activity.id === 'banking') {
+            if (runtime.target) {
+                this.startTargetInteraction(bot, runtime);
+            } else {
+                this.performBanking(bot, runtime, area);
+            }
+            return;
+        }
 
-        const advanced = runtime.activity.stat !== undefined && runtime.activity.xp ? bot.addSimulatedXp(runtime.activity.stat, runtime.activity.xp) : false;
+        let started = false;
+        switch (runtime.activity.id) {
+            case 'firemaking':
+                started = this.runInventoryUse(bot, 'logs', 'tinderbox');
+                break;
+            case 'fletching':
+                started = this.runInventoryUse(bot, 'logs', 'knife');
+                break;
+            case 'prayer':
+                started = this.runHeldOption(bot, 'bones', 0);
+                break;
+            case 'crafting':
+                started = this.runInventoryUse(bot, 'leather', 'needle');
+                break;
+            case 'herblore': {
+                const guamVial = ObjType.getId('guamvial');
+                const hasUnfinishedPotion = (bot.getInventory(InvType.INV)?.getItemCount(guamVial) ?? 0) > 0;
+                started = hasUnfinishedPotion ? this.runInventoryUse(bot, 'guamvial', 'eye_of_newt') : this.runInventoryUse(bot, 'vial_water', 'guam_leaf');
+                break;
+            }
+            case 'travelling':
+                started = true;
+                break;
+            default:
+                started = this.startTargetInteraction(bot, runtime);
+                break;
+        }
 
-        if (runtime.activity.product) {
-            addItem(profile.inventory, runtime.activity.product, 1);
+        if (!started) {
+            this.switchToBanking(bot, runtime, area);
+            return;
         }
 
         runtime.actionsRemaining--;
-
-        if (runtime.activity.stat !== undefined && advanced) {
-            bot.say(`Level ${bot.baseLevels[runtime.activity.stat]}!`);
-        } else if (Math.random() < 0.1) {
+        if (Math.random() < 0.08) {
             bot.say(randomOf(runtime.activity.chats));
-        }
-
-        if (totalItems(profile.inventory) >= (runtime.activity.maxInventory ?? 24)) {
-            runtime.activity = BANKING_ACTIVITY;
-            runtime.destination = this.destinationFor(BANKING_ACTIVITY, area);
-            runtime.actionsRemaining = 1;
-            profile.activity = 'banking';
-            profile.goal = BANKING_ACTIVITY.label;
-            this.resetRuntimeTracking(bot, runtime);
-        } else if (runtime.actionsRemaining <= 0) {
-            this.finishActivity(bot, runtime, area);
         }
 
         runtime.nextActionTick = this.world.currentTick + randomDelay(runtime.activity.actionTicks);
     }
 
     private finishActivity(bot: SimulatedPlayer, runtime: BotRuntime, area: AreaDefinition): void {
-        runtime.activity = this.chooseActivity(bot.profile, area);
+        bot.stopAction();
+        runtime.activity = this.chooseActivity(bot, area);
         runtime.destination = this.destinationFor(runtime.activity, area);
         runtime.nextActionTick = this.world.currentTick + randomDelay(runtime.activity.actionTicks);
         runtime.actionsRemaining = randomDelay(runtime.activity.actionLoops ?? [2, 6]);
         this.resetRuntimeTracking(bot, runtime);
         bot.profile.activity = runtime.activity.id;
         bot.profile.goal = runtime.activity.label;
+        this.retargetRuntime(bot, runtime, area);
+    }
+
+    private initializeBotScripts(bot: SimulatedPlayer): void {
+        const updateAll = ScriptProvider.getByName('[proc,update_all]');
+        if (updateAll) {
+            bot.executeScript(ScriptRunner.init(updateAll, bot, null, [-1]), true);
+        }
+    }
+
+    private canRunActivity(bot: SimulatedPlayer, activity: ActivityDefinition, area: AreaDefinition): boolean {
+        if (area.id === 'air_altar' && activity.id !== 'runecraft' && activity.id !== 'travelling') {
+            return false;
+        }
+        if (!Environment.node.members && ['fletching', 'thieving', 'agility', 'herblore'].includes(activity.id)) {
+            return false;
+        }
+
+        if (activity.id === 'travelling') {
+            return true;
+        }
+
+        const supplies = ACTIVITY_SUPPLIES[activity.id];
+        if (supplies && !Object.keys(supplies).every(item => this.totalOwned(bot, item) >= 1)) {
+            return false;
+        }
+
+        if (['firemaking', 'fletching', 'prayer', 'crafting', 'herblore'].includes(activity.id)) {
+            return true;
+        }
+
+        return this.findTarget(bot, activity, area) !== null;
+    }
+
+    private totalOwned(bot: SimulatedPlayer, name: string): number {
+        const id = ObjType.getId(name);
+        if (id === -1) {
+            return 0;
+        }
+
+        return (bot.getInventory(InvType.INV)?.getItemCount(id) ?? 0) + (bot.getInventory(InvType.getId('bank'))?.getItemCount(id) ?? 0) + (bot.getInventory(InvType.WORN)?.getItemCount(id) ?? 0);
+    }
+
+    private hasInventorySupplies(bot: SimulatedPlayer, activity: ActivityDefinition): boolean {
+        const supplies = ACTIVITY_SUPPLIES[activity.id];
+        if (!supplies) {
+            return true;
+        }
+
+        const inventory = bot.getInventory(InvType.INV);
+        const worn = bot.getInventory(InvType.WORN);
+        if (activity.id === 'herblore') {
+            const vial = ObjType.getId('vial_water');
+            const guam = ObjType.getId('guam_leaf');
+            const guamVial = ObjType.getId('guamvial');
+            const eye = ObjType.getId('eye_of_newt');
+            return ((inventory?.getItemCount(vial) ?? 0) > 0 && (inventory?.getItemCount(guam) ?? 0) > 0) || ((inventory?.getItemCount(guamVial) ?? 0) > 0 && (inventory?.getItemCount(eye) ?? 0) > 0);
+        }
+
+        return Object.keys(supplies).every(name => {
+            const id = ObjType.getId(name);
+            if (id === -1) {
+                return false;
+            }
+            const carried = inventory?.getItemCount(id) ?? 0;
+            const equipped = BANK_KEEP_ITEMS.has(name) ? worn?.getItemCount(id) ?? 0 : 0;
+            return carried + equipped >= 1;
+        });
+    }
+
+    private getLocCatalog(area: AreaDefinition): Loc[] {
+        const cached = this.locCatalog.get(area.id);
+        if (cached) {
+            return cached;
+        }
+
+        const locs: Loc[] = [];
+        const minZoneX = (area.center.x - area.radius) >> 3;
+        const maxZoneX = (area.center.x + area.radius) >> 3;
+        const minZoneZ = (area.center.z - area.radius) >> 3;
+        const maxZoneZ = (area.center.z + area.radius) >> 3;
+        for (let zoneX = minZoneX; zoneX <= maxZoneX; zoneX++) {
+            for (let zoneZ = minZoneZ; zoneZ <= maxZoneZ; zoneZ++) {
+                const zone = this.world.gameMap.getZone(zoneX << 3, zoneZ << 3, area.center.level);
+                for (const loc of zone.getAllLocsUnsafe()) {
+                    if (distance(loc, area.center) <= area.radius) {
+                        locs.push(loc);
+                    }
+                }
+            }
+        }
+        this.locCatalog.set(area.id, locs);
+        return locs;
+    }
+
+    private getNpcCatalog(area: AreaDefinition): Npc[] {
+        const cached = this.npcCatalog.get(area.id);
+        if (cached) {
+            return cached;
+        }
+
+        const npcs = new Set<Npc>();
+        const minZoneX = (area.center.x - area.radius) >> 3;
+        const maxZoneX = (area.center.x + area.radius) >> 3;
+        const minZoneZ = (area.center.z - area.radius) >> 3;
+        const maxZoneZ = (area.center.z + area.radius) >> 3;
+        for (let zoneX = minZoneX; zoneX <= maxZoneX; zoneX++) {
+            for (let zoneZ = minZoneZ; zoneZ <= maxZoneZ; zoneZ++) {
+                const zone = this.world.gameMap.getZone(zoneX << 3, zoneZ << 3, area.center.level);
+                for (const npc of zone.getAllNpcsUnsafe()) {
+                    npcs.add(npc);
+                }
+            }
+        }
+        const catalog = [...npcs];
+        this.npcCatalog.set(area.id, catalog);
+        return catalog;
+    }
+
+    private getTargetAction(bot: SimulatedPlayer, activity: ActivityDefinition, target: Loc | Npc): { op: number; useItem: string | null } | null {
+        if (!target.isValid(bot.hash64)) {
+            return null;
+        }
+
+        if (target instanceof Loc) {
+            const type = LocType.get(target.type);
+            let op = -1;
+            let useItem: string | null = null;
+            switch (activity.id) {
+                case 'woodcutting':
+                    op = optionIndex(type.op, /^(chop down|cut)$/i);
+                    break;
+                case 'mining':
+                    op = optionIndex(type.op, /^mine$/i);
+                    break;
+                case 'thieving':
+                    op = optionIndex(type.op, /^steal-from$/i);
+                    break;
+                case 'agility': {
+                    const name = `${type.debugname ?? ''} ${type.name ?? ''}`;
+                    if (!/(obstacle|agility|balance|rope|net|pipe|ledge|climb|monkey|stepping|log)/i.test(name)) {
+                        return null;
+                    }
+                    op = optionIndex(type.op, /^(climb|climb-over|cross|balance|swing-on|squeeze-through|jump|walk-across)$/i);
+                    break;
+                }
+                case 'cooking': {
+                    const name = `${type.debugname ?? ''} ${type.name ?? ''}`;
+                    if (!/(range|stove|cooking|fire|oven)/i.test(name)) {
+                        return null;
+                    }
+                    useItem = 'raw_shrimp';
+                    break;
+                }
+                case 'smithing':
+                    if (!/(anvil)/i.test(`${type.debugname ?? ''} ${type.name ?? ''}`)) {
+                        return null;
+                    }
+                    useItem = 'bronze_bar';
+                    break;
+                case 'runecraft':
+                    op = optionIndex(type.op, /^craft-rune$/i);
+                    break;
+                case 'banking':
+                    op = optionIndex(type.op, /^bank$/i);
+                    break;
+                default:
+                    return null;
+            }
+
+            if (useItem) {
+                const hasTrigger = ScriptProvider.getByTrigger(ServerTriggerType.APLOCU, type.id, type.category) || ScriptProvider.getByTrigger(ServerTriggerType.OPLOCU, type.id, type.category);
+                return hasTrigger ? { op: -1, useItem } : null;
+            }
+            if (op === -1) {
+                return null;
+            }
+            const trigger = ServerTriggerType.APLOC1 + op;
+            return ScriptProvider.getByTrigger(trigger, type.id, type.category) || ScriptProvider.getByTrigger(trigger + 7, type.id, type.category) ? { op, useItem: null } : null;
+        }
+
+        const type = NpcType.get(target.type);
+        let op = -1;
+        switch (activity.id) {
+            case 'fishing':
+                op = optionIndex(type.op, /^(net|bait|lure|harpoon|cage)$/i);
+                break;
+            case 'combat':
+                if (type.vislevel > Math.max(20, bot.combatLevel + 15)) {
+                    return null;
+                }
+                op = optionIndex(type.op, /^attack$/i);
+                break;
+            case 'thieving':
+                op = optionIndex(type.op, /^pickpocket$/i);
+                break;
+            case 'banking':
+                op = optionIndex(type.op, /^bank$/i);
+                break;
+            default:
+                return null;
+        }
+        if (op === -1) {
+            return null;
+        }
+        const trigger = ServerTriggerType.APNPC1 + op;
+        return ScriptProvider.getByTrigger(trigger, type.id, type.category) || ScriptProvider.getByTrigger(trigger + 7, type.id, type.category) ? { op, useItem: null } : null;
+    }
+
+    private findTarget(bot: SimulatedPlayer, activity: ActivityDefinition, area: AreaDefinition): Loc | Npc | null {
+        const candidates: (Loc | Npc)[] = [];
+        for (const loc of this.getLocCatalog(area)) {
+            if (this.getTargetAction(bot, activity, loc)) {
+                candidates.push(loc);
+            }
+        }
+        for (const npc of this.getNpcCatalog(area)) {
+            if (distance(npc, area.center) <= area.radius && this.getTargetAction(bot, activity, npc)) {
+                candidates.push(npc);
+            }
+        }
+
+        if (activity.id === 'banking') {
+            const localBanks = candidates.filter(candidate => distance(candidate, area.bank) <= 48);
+            localBanks.sort((a, b) => distance(area.bank, a) - distance(area.bank, b));
+            const nearbyBanks = localBanks.slice(0, Math.min(8, localBanks.length));
+            return nearbyBanks.length > 0 ? randomOf(nearbyBanks) : null;
+        }
+
+        candidates.sort((a, b) => distance(bot, a) - distance(bot, b));
+        const nearby = candidates.slice(0, Math.min(16, candidates.length));
+        return nearby.length > 0 ? randomOf(nearby) : null;
+    }
+
+    private targetMatches(bot: SimulatedPlayer, activity: ActivityDefinition, target: Loc | Npc): boolean {
+        return this.getTargetAction(bot, activity, target) !== null;
+    }
+
+    private retargetRuntime(bot: SimulatedPlayer, runtime: BotRuntime, area: AreaDefinition): void {
+        runtime.target = null;
+        runtime.op = -1;
+        runtime.useItem = null;
+
+        if (runtime.activity.id === 'travelling') {
+            runtime.destination = this.destinationFor(runtime.activity, area);
+            return;
+        }
+
+        if (['firemaking', 'prayer'].includes(runtime.activity.id)) {
+            runtime.destination = this.destinationFor(runtime.activity, area);
+            return;
+        }
+
+        if (['fletching', 'crafting', 'herblore'].includes(runtime.activity.id)) {
+            const banker = this.findTarget(bot, BANKING_ACTIVITY, area);
+            runtime.destination = banker ? this.walkableTileNear(banker, area) : this.destinationFor(runtime.activity, area);
+            return;
+        }
+
+        const target = this.findTarget(bot, runtime.activity, area);
+        if (!target) {
+            runtime.destination = this.destinationFor(runtime.activity, area);
+            return;
+        }
+
+        const action = this.getTargetAction(bot, runtime.activity, target);
+        if (!action) {
+            return;
+        }
+        runtime.target = target;
+        runtime.op = action.op;
+        runtime.useItem = action.useItem;
+        runtime.destination = { level: target.level, x: target.x, z: target.z };
+    }
+
+    private walkableTileNear(target: Loc | Npc, area: AreaDefinition): Coord {
+        const candidates: Coord[] = [
+            { level: target.level, x: target.x - 1, z: target.z },
+            { level: target.level, x: target.x + target.width, z: target.z },
+            { level: target.level, x: target.x, z: target.z - 1 },
+            { level: target.level, x: target.x, z: target.z + target.length }
+        ];
+        return candidates.find(candidate => this.isUsableDestination(candidate, area)) ?? area.bank;
+    }
+
+    private startTargetInteraction(bot: SimulatedPlayer, runtime: BotRuntime): boolean {
+        const target = runtime.target;
+        if (!target) {
+            return false;
+        }
+
+        let trigger: ServerTriggerType;
+        if (target instanceof Loc) {
+            if (runtime.useItem) {
+                const id = ObjType.getId(runtime.useItem);
+                const slot = bot.getInventory(InvType.INV)?.getItemIndex(id) ?? -1;
+                if (id === -1 || slot === -1) {
+                    return false;
+                }
+                bot.lastUseItem = id;
+                bot.lastUseSlot = slot;
+                trigger = ServerTriggerType.APLOCU;
+            } else {
+                trigger = ServerTriggerType.APLOC1 + runtime.op;
+            }
+        } else {
+            trigger = ServerTriggerType.APNPC1 + runtime.op;
+        }
+
+        bot.clearPendingAction();
+        return bot.setInteraction(Interaction.ENGINE, target, trigger);
+    }
+
+    private handleBotDialog(bot: SimulatedPlayer): boolean {
+        const script = bot.activeScript;
+        if (!script) {
+            return false;
+        }
+
+        if (script.execution === ScriptState.PAUSEBUTTON && bot.resumeButtons.length > 0) {
+            bot.lastCom = randomOf(bot.resumeButtons);
+            bot.executeScript(script, true, true);
+            return true;
+        }
+        if (script.execution === ScriptState.COUNTDIALOG) {
+            script.lastInt = randomDelay([5, 12]);
+            bot.executeScript(script, true, true);
+            return true;
+        }
+        return false;
+    }
+
+    private handleSkillInterface(bot: SimulatedPlayer, runtime: BotRuntime, area: AreaDefinition): boolean {
+        let component = -1;
+        let trigger: ServerTriggerType;
+        if (runtime.activity.id === 'crafting') {
+            component = Component.getId('leather_crafting:com_115');
+            trigger = ServerTriggerType.IF_BUTTON;
+        } else if (runtime.activity.id === 'smithing') {
+            component = Component.getId('smithing:column1');
+            trigger = ServerTriggerType.INV_BUTTON2;
+            bot.lastItem = ObjType.getId('bronze_dagger');
+            bot.lastSlot = 0;
+        } else {
+            return false;
+        }
+
+        const script = component === -1 ? undefined : ScriptProvider.getByTriggerSpecific(trigger, component, -1);
+        if (!script) {
+            bot.closeModal();
+            this.finishActivity(bot, runtime, area);
+            return true;
+        }
+
+        bot.lastCom = component;
+        bot.executeScript(ScriptRunner.init(script, bot), true);
+        return true;
+    }
+
+    private runHeldOption(bot: SimulatedPlayer, name: string, op: number): boolean {
+        const id = ObjType.getId(name);
+        const slot = bot.getInventory(InvType.INV)?.getItemIndex(id) ?? -1;
+        if (id === -1 || slot === -1) {
+            return false;
+        }
+
+        const type = ObjType.get(id);
+        const script = ScriptProvider.getByTrigger(ServerTriggerType.OPHELD1 + op, type.id, type.category);
+        if (!script) {
+            return false;
+        }
+        bot.lastItem = id;
+        bot.lastSlot = slot;
+        bot.clearPendingAction();
+        bot.executeScript(ScriptRunner.init(script, bot), true);
+        return true;
+    }
+
+    private runInventoryUse(bot: SimulatedPlayer, targetName: string, useName: string): boolean {
+        const inventory = bot.getInventory(InvType.INV);
+        const targetId = ObjType.getId(targetName);
+        const useId = ObjType.getId(useName);
+        const targetSlot = inventory?.getItemIndex(targetId) ?? -1;
+        const useSlot = inventory?.getItemIndex(useId) ?? -1;
+        if (targetId === -1 || useId === -1 || targetSlot === -1 || useSlot === -1) {
+            return false;
+        }
+
+        bot.lastItem = targetId;
+        bot.lastSlot = targetSlot;
+        bot.lastUseItem = useId;
+        bot.lastUseSlot = useSlot;
+
+        const targetType = ObjType.get(targetId);
+        const useType = ObjType.get(useId);
+        let script = ScriptProvider.getByTriggerSpecific(ServerTriggerType.OPHELDU, targetType.id, -1);
+        if (!script) {
+            script = ScriptProvider.getByTriggerSpecific(ServerTriggerType.OPHELDU, useType.id, -1);
+            [bot.lastItem, bot.lastUseItem] = [bot.lastUseItem, bot.lastItem];
+            [bot.lastSlot, bot.lastUseSlot] = [bot.lastUseSlot, bot.lastSlot];
+        }
+        if (!script && targetType.category !== -1 && CategoryType.get(targetType.category)) {
+            script = ScriptProvider.getByTriggerSpecific(ServerTriggerType.OPHELDU, -1, targetType.category);
+        }
+        if (!script && useType.category !== -1 && CategoryType.get(useType.category)) {
+            script = ScriptProvider.getByTriggerSpecific(ServerTriggerType.OPHELDU, -1, useType.category);
+            [bot.lastItem, bot.lastUseItem] = [bot.lastUseItem, bot.lastItem];
+            [bot.lastSlot, bot.lastUseSlot] = [bot.lastUseSlot, bot.lastSlot];
+        }
+        if (!script) {
+            return false;
+        }
+
+        bot.clearPendingAction();
+        bot.executeScript(ScriptRunner.init(script, bot), true);
+        return true;
+    }
+
+    private switchToBanking(bot: SimulatedPlayer, runtime: BotRuntime, area: AreaDefinition): void {
+        bot.stopAction();
+        runtime.activity = BANKING_ACTIVITY;
+        runtime.destination = this.destinationFor(BANKING_ACTIVITY, area);
+        runtime.nextActionTick = this.world.currentTick + 2;
+        runtime.actionsRemaining = 1;
+        bot.profile.activity = 'banking';
+        bot.profile.goal = BANKING_ACTIVITY.label;
+        this.retargetRuntime(bot, runtime, area);
+    }
+
+    private performBanking(bot: SimulatedPlayer, runtime: BotRuntime, area: AreaDefinition): void {
+        const inventory = bot.getInventory(InvType.INV);
+        const bank = bot.getInventory(InvType.getId('bank'));
+        if (!inventory || !bank) {
+            this.finishActivity(bot, runtime, area);
+            return;
+        }
+
+        for (let slot = 0; slot < inventory.capacity; slot++) {
+            const item = inventory.get(slot);
+            if (!item) {
+                continue;
+            }
+            const moved = bank.add(item.id, item.count);
+            if (moved >= item.count) {
+                inventory.delete(slot);
+            } else if (moved > 0) {
+                inventory.set(slot, { id: item.id, count: item.count - moved });
+            }
+        }
+
+        bot.closeModal();
+        this.finishActivity(bot, runtime, area);
+        this.withdrawSupplies(bot, runtime.activity);
+        if (Math.random() < 0.35) {
+            bot.say(randomOf(BANKING_ACTIVITY.chats));
+        }
+    }
+
+    private withdrawSupplies(bot: SimulatedPlayer, activity: ActivityDefinition): void {
+        const supplies = ACTIVITY_SUPPLIES[activity.id];
+        const inventory = bot.getInventory(InvType.INV);
+        const bank = bot.getInventory(InvType.getId('bank'));
+        if (!supplies || !inventory || !bank) {
+            return;
+        }
+
+        for (const [name, desired] of Object.entries(supplies)) {
+            const id = ObjType.getId(name);
+            if (id === -1) {
+                continue;
+            }
+            const missing = Math.max(0, desired - inventory.getItemCount(id) - (BANK_KEEP_ITEMS.has(name) ? bot.getInventory(InvType.WORN)?.getItemCount(id) ?? 0 : 0));
+            const available = Math.min(missing, bank.getItemCount(id));
+            const moved = inventory.add(id, available);
+            if (moved > 0) {
+                bank.remove(id, moved);
+            }
+        }
     }
 
     private recoverBot(bot: SimulatedPlayer, runtime: BotRuntime, area: AreaDefinition): void {
@@ -945,16 +1630,6 @@ export default class WorldLifeDirector {
         runtime.lastZ = bot.z;
         runtime.lastDistance = distance(bot, runtime.destination);
         runtime.lastProgressTick = this.world.currentTick;
-    }
-
-    private playActivityAnimation(bot: SimulatedPlayer, activity: ActivityDefinition): void {
-        for (const name of activity.anims) {
-            const id = seq(name);
-            if (id !== -1) {
-                bot.playAnimation(id, 0);
-                return;
-            }
-        }
     }
 
     private despawn(bot: SimulatedPlayer): void {

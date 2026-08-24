@@ -2,6 +2,7 @@ import InvType from '#/cache/config/InvType.js';
 import ObjType from '#/cache/config/ObjType.js';
 import SeqType from '#/cache/config/SeqType.js';
 import { BlockWalk } from '#/engine/entity/BlockWalk.js';
+import { MoveStrategy } from '#/engine/entity/MoveStrategy.js';
 import Player, { getLevelByExp } from '#/engine/entity/Player.js';
 import { ChatModePrivate, ChatModeTradeDuel } from '#/engine/entity/ChatModes.js';
 import { BotProfile } from '#/engine/living/BotProfileStore.js';
@@ -34,6 +35,7 @@ export default class SimulatedPlayer extends Player {
         this.profile = profile;
         this.session = `bot:${profile.id}`;
         this.blockWalk = BlockWalk.NONE;
+        this.moveStrategy = MoveStrategy.SMART;
         this.privateChat = ChatModePrivate.OFF;
         this.tradeDuel = ChatModeTradeDuel.OFF;
         this.x = profile.x;
@@ -43,6 +45,8 @@ export default class SimulatedPlayer extends Player {
         this.body = [...profile.body];
         this.colors = [...profile.colors];
         this.applyProfileWorn();
+        this.applyProfileInventory(InvType.INV, profile.inventory);
+        this.applyProfileInventory(InvType.getId('bank'), profile.bank);
 
         for (let i = 0; i < this.stats.length; i++) {
             this.stats[i] = profile.stats[i] ?? 0;
@@ -52,6 +56,37 @@ export default class SimulatedPlayer extends Player {
 
         this.combatLevel = this.getCombatLevel();
         this.applyHumanBaseAnimations();
+    }
+
+    private applyProfileInventory(invType: number, store: Record<string, number>): void {
+        const inventory = this.getInventory(invType);
+        if (!inventory) {
+            return;
+        }
+
+        inventory.removeAll();
+        for (const [name, count] of Object.entries(store)) {
+            const id = ObjType.getId(name);
+            if (id !== -1 && count > 0) {
+                inventory.add(id, Math.trunc(count));
+            }
+        }
+    }
+
+    private syncProfileInventory(invType: number): Record<string, number> {
+        const store: Record<string, number> = {};
+        const inventory = this.getInventory(invType);
+        if (!inventory) {
+            return store;
+        }
+
+        for (const item of inventory.itemsFiltered) {
+            const name = ObjType.get(item.id).debugname;
+            if (name) {
+                store[name] = (store[name] ?? 0) + item.count;
+            }
+        }
+        return store;
     }
 
     private applyProfileWorn(): void {
@@ -125,6 +160,8 @@ export default class SimulatedPlayer extends Player {
         this.profile.colors = [...this.colors];
         this.profile.stats = Array.from(this.stats);
         this.profile.levels = Array.from(this.levels);
+        this.profile.inventory = this.syncProfileInventory(InvType.INV);
+        this.profile.bank = this.syncProfileInventory(InvType.getId('bank'));
         this.profile.lastSeenTick = tick;
     }
 

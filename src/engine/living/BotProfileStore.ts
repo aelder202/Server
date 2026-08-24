@@ -3,7 +3,7 @@ import path from 'path';
 
 import { PlayerStat } from '#/engine/entity/PlayerStat.js';
 
-export const BOT_PROFILE_VERSION = 2;
+export const BOT_PROFILE_VERSION = 4;
 
 export type LivingWorldActivity =
     | 'idle'
@@ -14,6 +14,13 @@ export type LivingWorldActivity =
     | 'mining'
     | 'essence_mining'
     | 'combat'
+    | 'cooking'
+    | 'thieving'
+    | 'prayer'
+    | 'agility'
+    | 'crafting'
+    | 'herblore'
+    | 'runecraft'
     | 'smithing'
     | 'firemaking'
     | 'fletching'
@@ -240,11 +247,14 @@ function createStats(username: string, index: number, role: string): { stats: nu
     setStat(stats, levels, PlayerStat.HITPOINTS, 10);
     setStat(stats, levels, PlayerStat.WOODCUTTING, randomLevel(rng, 1, 55));
     setStat(stats, levels, PlayerStat.FISHING, randomLevel(rng, 1, 35));
+    setStat(stats, levels, PlayerStat.COOKING, randomLevel(rng, 1, 50));
     setStat(stats, levels, PlayerStat.MINING, randomLevel(rng, 1, 55));
     setStat(stats, levels, PlayerStat.SMITHING, randomLevel(rng, 1, 45));
     setStat(stats, levels, PlayerStat.FIREMAKING, randomLevel(rng, 1, 45));
     setStat(stats, levels, PlayerStat.FLETCHING, randomLevel(rng, 1, 45));
     setStat(stats, levels, PlayerStat.CRAFTING, randomLevel(rng, 1, 30));
+    setStat(stats, levels, PlayerStat.HERBLORE, randomLevel(rng, 3, 35));
+    setStat(stats, levels, PlayerStat.AGILITY, randomLevel(rng, 1, 35));
     setStat(stats, levels, PlayerStat.RUNECRAFT, randomLevel(rng, 1, 20));
 
     switch (role) {
@@ -358,9 +368,34 @@ function defaultProfile(username: string, index: number): BotProfile {
 
 function createStartingBank(index: number, role: string): BotItemStore {
     const base = 12 + (index % 31);
+    const commonSupplies: BotItemStore = {
+        bronze_axe: 1,
+        bronze_pickaxe: 1,
+        net: 1,
+        fishing_rod: 1,
+        fly_fishing_rod: 1,
+        lobster_pot: 1,
+        harpoon: 1,
+        fishing_bait: 250,
+        feather: 250,
+        tinderbox: 1,
+        knife: 1,
+        hammer: 1,
+        logs: 80,
+        raw_shrimp: 40,
+        bones: 40,
+        bronze_bar: 48,
+        needle: 1,
+        thread: 80,
+        leather: 48,
+        vial_water: 48,
+        guam_leaf: 48,
+        eye_of_newt: 48,
+        blankrune: 64
+    };
     const stockByRole: Record<string, BotItemStore> = {
         skiller: { logs: base * 2, copper_ore: base },
-        newbie: { bones: base, raw_shrimps: Math.ceil(base / 2) },
+        newbie: { bones: base, raw_shrimp: Math.ceil(base / 2) },
         melee_low: { bones: base * 2 },
         ranger: { logs: base, unstrung_shortbow: Math.ceil(base / 3) },
         smith: { copper_ore: base * 2, steel_knife: base },
@@ -371,7 +406,15 @@ function createStartingBank(index: number, role: string): BotItemStore {
         veteran: { copper_ore: base, blankrune: base, vial_water: Math.ceil(base / 2) }
     };
 
-    return { ...(stockByRole[role] ?? stockByRole.newbie) };
+    return mergeMigrationSupplies(stockByRole[role] ?? stockByRole.newbie, commonSupplies);
+}
+
+function mergeMigrationSupplies(bank: BotItemStore, fallback: BotItemStore): BotItemStore {
+    const migrated = { ...bank };
+    for (const [item, count] of Object.entries(fallback)) {
+        migrated[item] = Math.max(migrated[item] ?? 0, count);
+    }
+    return migrated;
 }
 
 function normalizeItemStore(value: unknown): BotItemStore {
@@ -397,15 +440,24 @@ function normalizeWorn(value: unknown): string[] {
 }
 
 function normalizeProfile(profile: Partial<BotProfile>, fallback: BotProfile): BotProfile {
-    const legacyProfile = profile.version !== BOT_PROFILE_VERSION;
-    const stats = !legacyProfile && Array.isArray(profile.stats) ? profile.stats.slice(0, STAT_COUNT) : [...fallback.stats];
-    const levels = !legacyProfile && Array.isArray(profile.levels) ? profile.levels.slice(0, STAT_COUNT) : [...fallback.levels];
+    const needsInventoryMigration = profile.version !== BOT_PROFILE_VERSION;
+    const stats = Array.isArray(profile.stats) ? profile.stats.slice(0, STAT_COUNT) : [...fallback.stats];
+    const levels = Array.isArray(profile.levels) ? profile.levels.slice(0, STAT_COUNT) : [...fallback.levels];
+    const storedBank = normalizeItemStore(profile.bank);
 
     while (stats.length < STAT_COUNT) {
         stats.push(0);
     }
     while (levels.length < STAT_COUNT) {
         levels.push(1);
+    }
+    if (needsInventoryMigration) {
+        for (const stat of [PlayerStat.COOKING, PlayerStat.HERBLORE, PlayerStat.AGILITY]) {
+            if (levels[stat] <= 1) {
+                levels[stat] = fallback.levels[stat];
+                stats[stat] = fallback.stats[stat];
+            }
+        }
     }
 
     return {
@@ -414,18 +466,18 @@ function normalizeProfile(profile: Partial<BotProfile>, fallback: BotProfile): B
         version: BOT_PROFILE_VERSION,
         id: fallback.id,
         username: fallback.username,
-        role: !legacyProfile && typeof profile.role === 'string' ? profile.role : fallback.role,
+        role: typeof profile.role === 'string' ? profile.role : fallback.role,
         gender: profile.gender === 1 ? 1 : 0,
         body: Array.isArray(profile.body) && profile.body.length === 7 ? profile.body : fallback.body,
         colors: Array.isArray(profile.colors) && profile.colors.length === 5 ? profile.colors : fallback.colors,
-        worn: !legacyProfile && normalizeWorn(profile.worn).length > 0 ? normalizeWorn(profile.worn) : fallback.worn,
+        worn: normalizeWorn(profile.worn).length > 0 ? normalizeWorn(profile.worn) : fallback.worn,
         x: typeof profile.x === 'number' ? profile.x : fallback.x,
         z: typeof profile.z === 'number' ? profile.z : fallback.z,
         level: typeof profile.level === 'number' ? profile.level : fallback.level,
         stats,
         levels,
         inventory: normalizeItemStore(profile.inventory),
-        bank: normalizeItemStore(profile.bank),
+        bank: needsInventoryMigration ? mergeMigrationSupplies(storedBank, fallback.bank) : storedBank,
         activity: profile.activity ?? fallback.activity,
         goal: profile.goal ?? fallback.goal,
         ticksActive: profile.ticksActive ?? fallback.ticksActive,
