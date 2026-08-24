@@ -21,6 +21,9 @@ const CLIENT_COMMANDS: CommandButton[] = [
     { label: 'WASD camera off', command: `::plugin ${WASD_CAMERA_PLUGIN_ID} off`, description: 'Restore the original always-ready chat controls.', mode: 'run', tags: ['camera', 'chat', 'qol'] },
     { label: 'Pickpocket left-click on', command: '::pickpocket on', description: 'Make Pickpocket the left-click action whenever an NPC supports it.', mode: 'run', tags: ['thieving', 'thief', 'qol'] },
     { label: 'Pickpocket left-click off', command: '::pickpocket off', description: 'Restore the original combat-level-based NPC action order.', mode: 'run', tags: ['thieving', 'thief', 'qol'] },
+    { label: 'Shop left-click: Buy 1', command: '::shopbuy 1', description: 'Make Buy 1 the default shop action.', mode: 'run', tags: ['shop', 'buy', 'qol'] },
+    { label: 'Shop left-click: Buy 5', command: '::shopbuy 5', description: 'Make Buy 5 the default shop action.', mode: 'run', tags: ['shop', 'buy', 'qol'] },
+    { label: 'Shop left-click: Buy 10', command: '::shopbuy 10', description: 'Make Buy 10 the default shop action.', mode: 'run', tags: ['shop', 'buy', 'qol'] },
     { label: 'FPS on', command: '::fpson', description: 'Show the FPS counter.', mode: 'run' },
     { label: 'FPS off', command: '::fpsoff', description: 'Hide the FPS counter.', mode: 'run' },
     { label: 'Set FPS target', command: '::fps <target>', description: 'Set the client target framerate.', mode: 'fill' },
@@ -42,6 +45,8 @@ const SERVER_COMMANDS: CommandButton[] = [
     { label: 'Mute', command: '::mute <username> <minutes>', description: 'Temporarily mute a player.', mode: 'fill', tags: ['staff 2', 'production'] },
     { label: 'Kick', command: '::kick <username>', description: 'Kick a player from the game.', mode: 'fill', tags: ['staff 2', 'production'] },
     { label: 'XP rate', command: '::xprate <rate>', description: 'Set the world XP multiplier.', mode: 'fill', tags: ['staff 3'] },
+    { label: 'Infinite shop stock', command: '::infstock [on|off|status]', description: 'Toggle or inspect world-wide non-depleting shop stock.', mode: 'fill', tags: ['staff 3', 'shop'] },
+    { label: 'Multiplied thieving loot', command: '::thievloot [on|off|status]', description: 'Apply the XP multiplier to pickpocket, stall, and trapped-chest loot.', mode: 'fill', tags: ['staff 3', 'thieving'] },
     { label: 'Living world', command: '::life [on|off|status]', description: 'Enable, disable, or inspect adventurer bots.', mode: 'fill', tags: ['staff 3', 'living world'] },
     { label: 'Bot population', command: '::botcount <0-1000>', description: 'Set the active adventurer bot population target.', mode: 'fill', tags: ['staff 3', 'living world'] },
     { label: 'Infinite run', command: '::infrun [on|off]', description: 'Toggle infinite run energy.', mode: 'fill', tags: ['staff 3'] },
@@ -118,7 +123,7 @@ const STAFF_COMMANDS: CommandButton[] = [
     ...SERVER_COMMANDS.filter(item => !SERVER_TELEPORT_COMMANDS.includes(item))
 ];
 const COMMON_COMMANDS: CommandButton[] = [
-    ...CLIENT_COMMANDS.filter(item => ['::plugins', '::fpson', '::fpsoff', '::fps <target>', '::pickpocket on', '::pickpocket off'].includes(item.command) || item.command.startsWith(`::plugin ${WASD_CAMERA_PLUGIN_ID}`)),
+    ...CLIENT_COMMANDS.filter(item => ['::plugins', '::fpson', '::fpsoff', '::fps <target>', '::pickpocket on', '::pickpocket off', '::shopbuy 1', '::shopbuy 5', '::shopbuy 10'].includes(item.command) || item.command.startsWith(`::plugin ${WASD_CAMERA_PLUGIN_ID}`)),
     ...SERVER_COMMANDS.filter(item => ['::getcoord', '::teles', '::telefav <name>', '::tele <level,mapX,mapZ[,tileX,tileZ]>'].includes(item.command)),
     ...TELEPORT_FAVORITES.filter(item => COMMON_TELEPORTS.has(item.label))
 ];

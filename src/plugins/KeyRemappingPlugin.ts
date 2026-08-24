@@ -1,7 +1,6 @@
 import type { ClientPlugin, ClientPluginContext } from '#/plugins/PluginApi.js';
 
 const KEY_ENTER = 10;
-const KEY_ESCAPE = 27;
 const KEY_BACKSPACE = 8;
 const KEY_ARROW_LEFT = 1;
 const KEY_ARROW_RIGHT = 2;
@@ -39,7 +38,7 @@ export default class KeyRemappingPlugin implements ClientPlugin {
         ctx.requestRedrawChatback();
     }
 
-    onKeyDown(ctx: ClientPluginContext, ch: number, _event: KeyboardEvent): number | null {
+    onKeyDown(ctx: ClientPluginContext, ch: number, event: KeyboardEvent): number | null {
         if (!ctx.isChatInputRemappingAvailable()) {
             return ch;
         }
@@ -52,7 +51,7 @@ export default class KeyRemappingPlugin implements ClientPlugin {
 
             if (ch === KEY_ENTER && ctx.getChatInputText().length > 0) {
                 this.lockChat(ctx);
-            } else if (ch === KEY_ESCAPE) {
+            } else if (event.key === 'Escape') {
                 ctx.clearChatInput();
                 this.lockChat(ctx);
                 return null;

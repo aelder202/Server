@@ -14,6 +14,7 @@ import TitleFlames from '#/client/TitleFlames.js';
 import PluginManager from '#/plugins/PluginManager.js';
 import { ClientPluginContext, type LocalPlayerPluginState, type MenuEntry, type ScreenPoint } from '#/plugins/PluginApi.js';
 import { createDefaultPlugins } from '#/plugins/defaultPlugins.js';
+import ShopLeftClickPlugin from '#/plugins/ShopLeftClickPlugin.js';
 
 import FloType from '#/config/FloType.js';
 import SeqType, { PostanimMove, PreanimMove, RestartMode } from '#/config/SeqType.js';
@@ -2673,6 +2674,10 @@ export class Client extends GameShell {
             return this.handlePickpocketCommand(parts);
         }
 
+        if (command === 'shopbuy') {
+            return this.handleShopBuyCommand(parts);
+        }
+
         if (command === 'plugins') {
             const plugins: string = this.pluginManager
                 .summaries()
@@ -2729,6 +2734,29 @@ export class Client extends GameShell {
         }
 
         this.addChat(0, `Pickpocket left-click: ${enabled ? 'on' : 'off'}`, '');
+        return true;
+    }
+
+    private handleShopBuyCommand(parts: string[]): boolean {
+        const plugin = this.pluginManager.get('shop-left-click');
+        if (!(plugin instanceof ShopLeftClickPlugin)) {
+            this.addChat(0, 'Shop left-click plugin is unavailable.', '');
+            return true;
+        }
+
+        if (parts.length === 0) {
+            this.addChat(0, `Shop left-click: Buy ${plugin.getQuantity()}. Usage: ::shopbuy <1|5|10>`, '');
+            return true;
+        }
+
+        const quantity: number = Number.parseInt(parts[0] ?? '', 10);
+        if (parts.length !== 1 || !plugin.setQuantity(quantity)) {
+            this.addChat(0, 'Usage: ::shopbuy <1|5|10>', '');
+            return true;
+        }
+
+        this.pluginManager.setEnabled(plugin.id, true);
+        this.addChat(0, `Shop left-click set to Buy ${quantity}.`, '');
         return true;
     }
 
@@ -11593,11 +11621,12 @@ export class Client extends GameShell {
             }
 
             const chatInputHint: string | null = this.pluginManager.getChatInputHint();
+            const chatInputX: number = (font?.stringWid(username + ': ') ?? 0) + 6;
+            font?.drawString(username + ':', 4, 90, Colour.BLACK);
             if (chatInputHint) {
-                font?.drawString(chatInputHint, 4, 90, Colour.BLUE);
+                font?.drawString(chatInputHint, chatInputX, 90, Colour.BLUE);
             } else {
-                font?.drawString(username + ':', 4, 90, Colour.BLACK);
-                font?.drawString(this.chatInput + '*', font.stringWid(username + ': ') + 6, 90, Colour.BLUE);
+                font?.drawString(this.chatInput + '*', chatInputX, 90, Colour.BLUE);
             }
 
             Pix2D.hline(0, 77, 479, Colour.BLACK);
@@ -12230,6 +12259,15 @@ export class Client extends GameShell {
         this.mouseX = x;
         this.mouseY = y;
 
+        if (e.deltaY === 0) {
+            return;
+        }
+
+        if (this.ingame && this.scrollInterfaceAt(x, y, Math.sign(e.deltaY) * 30)) {
+            e.preventDefault();
+            return;
+        }
+
         if (this.insideMinimapArea()) {
             e.preventDefault();
             this.adjustMinimapZoom(e);
@@ -12240,10 +12278,6 @@ export class Client extends GameShell {
             return;
         }
 
-        if (e.deltaY === 0) {
-            return;
-        }
-
         e.preventDefault();
         if (this.pluginManager.onMouseWheel(e)) {
             return;
@@ -12251,6 +12285,63 @@ export class Client extends GameShell {
 
         this.orbitCameraZoom += Math.sign(e.deltaY) * 96;
         this.orbitCameraZoom = Math.max(-450, Math.min(900, this.orbitCameraZoom));
+    }
+
+    private scrollInterfaceAt(mouseX: number, mouseY: number, delta: number): boolean {
+        if (this.mainModalId !== -1 && this.scrollComponentAt(IfType.list[this.mainModalId], mouseX, mouseY, 4, 4, 0, delta)) {
+            return true;
+        }
+
+        if (this.mainModalId === -1 && this.mainOverlayId !== -1 && this.scrollComponentAt(IfType.list[this.mainOverlayId], mouseX, mouseY, 4, 4, 0, delta)) {
+            return true;
+        }
+
+        const sideInterfaceId: number = this.sideModalId !== -1 ? this.sideModalId : this.sideIcon[this.activeIcon];
+        if (sideInterfaceId !== -1 && this.scrollComponentAt(IfType.list[sideInterfaceId], mouseX, mouseY, 553, 205, 0, delta)) {
+            this.redrawSide = true;
+            return true;
+        }
+
+        if (this.chatModalId !== -1 && this.scrollComponentAt(IfType.list[this.chatModalId], mouseX, mouseY, 17, 357, 0, delta)) {
+            this.redrawChat = true;
+            return true;
+        }
+
+        if (this.chatModalId === -1 && mouseX >= 17 && mouseX < 496 && mouseY >= 357 && mouseY < 434 && this.chatScrollHeight > 77) {
+            this.chatScrollPos = Math.max(0, Math.min(this.chatScrollHeight - 77, this.chatScrollPos - delta));
+            this.redrawChat = true;
+            return true;
+        }
+
+        return false;
+    }
+
+    private scrollComponentAt(com: IfType, mouseX: number, mouseY: number, x: number, y: number, scrollPosition: number, delta: number): boolean {
+        if (com.type !== ComponentType.TYPE_LAYER || !com.children || !com.childX || !com.childY || com.hide || mouseX < x || mouseY < y || mouseX >= x + com.width || mouseY >= y + com.height) {
+            return false;
+        }
+
+        for (let i: number = com.children.length - 1; i >= 0; i--) {
+            const child: IfType = IfType.list[com.children[i]];
+            if (child.type !== ComponentType.TYPE_LAYER) {
+                continue;
+            }
+
+            const childX: number = com.childX[i] + x + child.x;
+            const childY: number = com.childY[i] + y - scrollPosition + child.y;
+            if (this.scrollComponentAt(child, mouseX, mouseY, childX, childY, child.scrollPos, delta)) {
+                return true;
+            }
+
+            if (child.scrollHeight <= child.height || mouseX < childX || mouseY < childY || mouseX >= childX + child.width || mouseY >= childY + child.height) {
+                continue;
+            }
+
+            child.scrollPos = Math.max(0, Math.min(child.scrollHeight - child.height, child.scrollPos + delta));
+            return true;
+        }
+
+        return false;
     }
 
     touchStart(e: TouchEvent) {

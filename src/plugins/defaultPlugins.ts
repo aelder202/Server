@@ -5,8 +5,9 @@ import ExtendedInactivityTimerPlugin from '#/plugins/ExtendedInactivityTimerPlug
 import KeyRemappingPlugin from '#/plugins/KeyRemappingPlugin.js';
 import MenuEntrySwapperPlugin from '#/plugins/MenuEntrySwapperPlugin.js';
 import PickpocketLeftClickPlugin from '#/plugins/PickpocketLeftClickPlugin.js';
+import ShopLeftClickPlugin from '#/plugins/ShopLeftClickPlugin.js';
 import TrueTilePlugin from '#/plugins/TrueTilePlugin.js';
 
 export function createDefaultPlugins(): ClientPlugin[] {
-    return [new ExtendedInactivityTimerPlugin(), new ExtendedCameraZoomPlugin(), new BankMarketPlugin(), new TrueTilePlugin(), new MenuEntrySwapperPlugin(), new PickpocketLeftClickPlugin(), new KeyRemappingPlugin()];
+    return [new ExtendedInactivityTimerPlugin(), new ExtendedCameraZoomPlugin(), new BankMarketPlugin(), new TrueTilePlugin(), new MenuEntrySwapperPlugin(), new PickpocketLeftClickPlugin(), new ShopLeftClickPlugin(), new KeyRemappingPlugin()];
 }

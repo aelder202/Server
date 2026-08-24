@@ -15,8 +15,17 @@ type MarketResult = {
     source: 'market-sales' | 'market-value';
 };
 
+type MarketInventoryItem = {
+    id: number;
+    name: string;
+    count: number;
+};
+
 type MarketPayload =
     | { type: 'open' }
+    | { type: 'inventory-clear' }
+    | ({ type: 'inventory-item' } & MarketInventoryItem)
+    | { type: 'inventory-done' }
     | { type: 'clear'; query: string }
     | MarketResult
     | { type: 'done'; count: number; total: number }
@@ -30,11 +39,13 @@ export default class BankMarketPlugin implements ClientPlugin {
     private overlay: HTMLDivElement | null = null;
     private searchInput: HTMLInputElement | null = null;
     private amountInput: HTMLInputElement | null = null;
+    private inventoryList: HTMLDivElement | null = null;
     private results: HTMLDivElement | null = null;
     private status: HTMLDivElement | null = null;
     private searchTimer: ReturnType<typeof setTimeout> | null = null;
     private currentQuery: string = '';
     private resultCount: number = 0;
+    private inventoryItems: MarketInventoryItem[] = [];
 
     onStart(ctx: ClientPluginContext): void {
         this.ctx = ctx;
@@ -116,6 +127,13 @@ export default class BankMarketPlugin implements ClientPlugin {
             #lostcity-bank-market button:hover { background: #5a482c; }
             #lostcity-bank-market .market-controls { display: grid; grid-template-columns: 1fr 125px; gap: 10px; padding: 12px 16px; }
             #lostcity-bank-market input { box-sizing: border-box; width: 100%; border: 1px solid #7d6948; border-radius: 4px; background: #100e0b; color: white; padding: 9px 10px; }
+            #lostcity-bank-market .market-inventory { margin: 0 16px 12px; padding: 10px; border: 1px solid #56462f; border-radius: 6px; background: #17130f; }
+            #lostcity-bank-market .market-inventory-head { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; color: #ffd76a; font-weight: bold; }
+            #lostcity-bank-market .market-inventory-hint { color: #9e8f71; font-size: 11px; font-weight: normal; }
+            #lostcity-bank-market .market-inventory-list { display: flex; flex-wrap: wrap; gap: 6px; max-height: 104px; overflow: auto; }
+            #lostcity-bank-market .market-inventory-list button { display: inline-flex; gap: 7px; align-items: center; padding: 5px 8px; }
+            #lostcity-bank-market .market-inventory-count { color: #d5c394; font-size: 11px; }
+            #lostcity-bank-market .market-inventory-empty { color: #9e8f71; font-size: 12px; }
             #lostcity-bank-market .market-help, #lostcity-bank-market .market-status { padding: 0 16px 10px; color: #c7b997; }
             #lostcity-bank-market .market-results { overflow: auto; padding: 0 12px 14px; }
             #lostcity-bank-market .market-row { display: grid; grid-template-columns: minmax(170px,1fr) 115px 115px 72px 72px; align-items: center; gap: 8px; padding: 9px 4px; border-top: 1px solid #413625; }
@@ -137,6 +155,10 @@ export default class BankMarketPlugin implements ClientPlugin {
                     <input type="search" data-market-search placeholder="Search all tradeable items…" maxlength="48" aria-label="Search market items">
                     <input type="number" data-market-amount min="1" max="${MAX_AMOUNT}" value="1" aria-label="Trade amount">
                 </div>
+                <section class="market-inventory" aria-label="Tradeable inventory items">
+                    <div class="market-inventory-head"><span>Your inventory</span><span class="market-inventory-hint">Choose an item to look up its price</span></div>
+                    <div class="market-inventory-list"></div>
+                </section>
                 <div class="market-help">Prices come from completed trades on markets.lostcity.rs. The newest five clean coin sales are averaged once at least three exist.</div>
                 <div class="market-status" aria-live="polite">Search for an item to begin.</div>
                 <div class="market-results"></div>
@@ -146,6 +168,7 @@ export default class BankMarketPlugin implements ClientPlugin {
 
         this.searchInput = this.overlay.querySelector('[data-market-search]');
         this.amountInput = this.overlay.querySelector('[data-market-amount]');
+        this.inventoryList = this.overlay.querySelector('.market-inventory-list');
         this.results = this.overlay.querySelector('.market-results');
         this.status = this.overlay.querySelector('.market-status');
 
@@ -155,7 +178,10 @@ export default class BankMarketPlugin implements ClientPlugin {
                 this.close();
             }
         });
-        this.searchInput?.addEventListener('input', () => this.queueSearch());
+        this.searchInput?.addEventListener('input', () => {
+            this.renderInventory();
+            this.queueSearch();
+        });
         this.overlay.addEventListener('click', event => this.handleClick(event));
         this.overlay.addEventListener('keydown', event => {
             event.stopPropagation();
@@ -166,10 +192,14 @@ export default class BankMarketPlugin implements ClientPlugin {
         });
     }
 
-    private open(): void {
+    private open(requestInventory: boolean = true): void {
         this.installUi();
         this.overlay?.classList.add('open');
+        this.renderInventory();
         this.searchInput?.focus();
+        if (requestInventory) {
+            this.ctx?.sendServerCommand('market inventory');
+        }
         this.search();
     }
 
@@ -196,8 +226,19 @@ export default class BankMarketPlugin implements ClientPlugin {
     }
 
     private handleClick(event: Event): void {
-        const target: HTMLElement | null = event.target instanceof HTMLElement ? event.target.closest('[data-market-action]') : null;
+        const target: HTMLElement | null = event.target instanceof HTMLElement ? event.target.closest('[data-market-action], [data-market-inventory-id]') : null;
         if (!target) {
+            return;
+        }
+
+        const inventoryId: number = Number.parseInt(target.getAttribute('data-market-inventory-id') ?? '', 10);
+        if (Number.isSafeInteger(inventoryId)) {
+            const item: MarketInventoryItem | undefined = this.inventoryItems.find(candidate => candidate.id === inventoryId);
+            if (item && this.searchInput) {
+                this.searchInput.value = item.name;
+                this.renderInventory();
+                this.search();
+            }
             return;
         }
 
@@ -212,7 +253,19 @@ export default class BankMarketPlugin implements ClientPlugin {
 
     private handlePayload(payload: MarketPayload): void {
         if (payload.type === 'open') {
-            this.open();
+            this.open(false);
+            return;
+        }
+        if (payload.type === 'inventory-clear') {
+            this.inventoryItems = [];
+            return;
+        }
+        if (payload.type === 'inventory-item') {
+            this.inventoryItems.push(payload);
+            return;
+        }
+        if (payload.type === 'inventory-done') {
+            this.renderInventory();
             return;
         }
         if (payload.type === 'clear') {
@@ -266,6 +319,37 @@ export default class BankMarketPlugin implements ClientPlugin {
         sourceNode.textContent = source;
         name.appendChild(sourceNode);
         this.results.appendChild(row);
+    }
+
+    private renderInventory(): void {
+        if (!this.inventoryList) {
+            return;
+        }
+
+        this.inventoryList.replaceChildren();
+        const query: string = this.searchInput?.value.trim().toLowerCase() ?? '';
+        const matches: MarketInventoryItem[] = this.inventoryItems.filter(item => !query || item.name.toLowerCase().includes(query));
+        if (matches.length === 0) {
+            const empty: HTMLSpanElement = document.createElement('span');
+            empty.className = 'market-inventory-empty';
+            empty.textContent = query && this.inventoryItems.length > 0 ? 'No inventory items match this search.' : 'No tradeable items in your inventory.';
+            this.inventoryList.appendChild(empty);
+            return;
+        }
+
+        for (const item of matches) {
+            const button: HTMLButtonElement = document.createElement('button');
+            button.type = 'button';
+            button.setAttribute('data-market-inventory-id', String(item.id));
+
+            const name: HTMLSpanElement = document.createElement('span');
+            name.textContent = item.name;
+            const count: HTMLSpanElement = document.createElement('span');
+            count.className = 'market-inventory-count';
+            count.textContent = `x${this.formatCoins(item.count)}`;
+            button.append(name, count);
+            this.inventoryList.appendChild(button);
+        }
     }
 
     private setStatus(message: string, success?: boolean): void {
