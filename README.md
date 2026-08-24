@@ -29,6 +29,10 @@ The web controls include a persistent **WASD Camera** toggle. When enabled, W/S 
 
 Use `::pickpocket`, `::pickpocket on`, or the **Pickpocket Left-Click** plugin control to make Pickpocket the default left-click action on NPCs that support it. Use `::pickpocket off` to restore the original combat-level-based menu order. `::thief` is an alias for the same toggle.
 
+Scrollable game interfaces—including banks, quest lists, music lists, and chat—accept the mouse wheel when the pointer is over their content. In shops, use `::shopbuy 1`, `::shopbuy 5`, or `::shopbuy 10` to choose the persistent left-click purchase quantity for that browser.
+
+Administrators can use `::infstock on|off|status` to control non-depleting shop stock for the world. `::thievloot on|off|status` applies the current world XP rate to loot quantities from pickpockets, stalls, and trapped chests. Both world-wide toggles default to off after a server restart.
+
 Runtime settings live in the ignored `engine/data/config/world.json` file. In particular, `node.adminUsername`, `node.adminPasswordHash`, `node.xpRate`, and `node.livingWorld` control the protected administrator, XP multiplier, and bot population without rebuilding the code. Only the configured administrator receives staff level 4; all other local accounts receive staff level 0.
 
 Local character passwords are bcrypt-hashed in the ignored `engine/data/config/local-accounts.json` file. After upgrading from the former passwordless behavior, an unclaimed character adopts the password used for its first successful login. Subsequent logins must use that password. Use **Manage Characters** from `start.bat` to set a password in advance or change it later.
