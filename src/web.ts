@@ -155,6 +155,17 @@ fastify.get<{ Querystring: { plugin?: string; lowmem?: string } }>('/rs2.cgi', a
     }
 });
 
+fastify.get('/worldmap.jag', async (_req, reply) => {
+    const filePath = 'data/pack/mapview/worldmap.jag';
+
+    if (!fileExists(filePath)) {
+        reply.status(404);
+        return;
+    }
+
+    return reply.type('application/octet-stream').send(fs.createReadStream(filePath));
+});
+
 // cache routes
 
 fastify.get('/crc:cachebust', async (_req, reply) => {
@@ -252,17 +263,6 @@ fastify.get<{ Params: { crc: string } }>('/sounds:crc', async (req, reply) => {
 // map editor routes
 
 if (Environment.node.debug) {
-    fastify.get('/worldmap.jag', async (_req, reply) => {
-        const filePath = 'data/pack/mapview/worldmap.jag';
-
-        if (!fileExists(filePath)) {
-            reply.status(404);
-            return;
-        }
-
-        return reply.type('application/octet-stream').send(fs.createReadStream(filePath));
-    });
-
     fastify.addContentTypeParser('*', { parseAs: 'buffer' }, (_req, body, done) => {
         done(null, body);
     });

@@ -115,7 +115,7 @@ export function createDefaultWorldConfig(): WorldConfig {
             adminPasswordHash: '',
             livingWorld: {
                 enabled: true,
-                maxBots: 200,
+                maxBots: 1000,
                 radius: 192,
                 profileDir: 'data/living-world'
             },

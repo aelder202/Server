@@ -2313,7 +2313,7 @@ class World {
                 return;
             }
 
-            if (this.getTotalPlayers() > Environment.node.maxConnected) {
+            if (this.getTotalHumanPlayers() >= Environment.node.maxConnected) {
                 client.send(Uint8Array.from([7]));
                 client.close();
                 return;

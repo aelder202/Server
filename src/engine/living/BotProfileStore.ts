@@ -3,7 +3,7 @@ import path from 'path';
 
 import { PlayerStat } from '#/engine/entity/PlayerStat.js';
 
-export const BOT_PROFILE_VERSION = 4;
+export const BOT_PROFILE_VERSION = 5;
 
 export type LivingWorldActivity =
     | 'idle'
@@ -24,7 +24,9 @@ export type LivingWorldActivity =
     | 'smithing'
     | 'firemaking'
     | 'fletching'
-    | 'vial_filling';
+    | 'vial_filling'
+    | 'trading'
+    | 'questing';
 
 export type BotItemStore = Record<string, number>;
 
@@ -113,7 +115,11 @@ function createDefaultNames(): string[] {
     const names = new Set(CURATED_NAMES);
     for (const prefix of NAME_PREFIXES) {
         for (const suffix of NAME_SUFFIXES) {
-            names.add(`${prefix}${suffix}`);
+            const base = `${prefix}${suffix}`;
+            names.add(base);
+            for (let variant = 2; variant <= 4; variant++) {
+                names.add(`${base}${variant}`);
+            }
         }
     }
     return [...names];
@@ -127,20 +133,8 @@ const MALE_BODY = [0, 10, 18, 26, 33, 36, 42];
 const FEMALE_BODY = [45, -1, 56, 61, 67, 70, 79];
 
 const GEAR: Record<string, string[][]> = {
-    skiller: [
-        ['bronze_axe'],
-        ['iron_axe'],
-        ['bronze_pickaxe'],
-        ['steel_pickaxe'],
-        ['knife'],
-        ['plainstaff']
-    ],
-    newbie: [
-        [],
-        ['bronze_sword'],
-        ['bronze_sword', 'bronze_sq_shield'],
-        ['bronze_sword', 'bronze_chainbody']
-    ],
+    skiller: [['bronze_axe'], ['iron_axe'], ['bronze_pickaxe'], ['steel_pickaxe'], ['knife'], ['plainstaff']],
+    newbie: [[], ['bronze_sword'], ['bronze_sword', 'bronze_sq_shield'], ['bronze_sword', 'bronze_chainbody']],
     melee_low: [
         ['iron_sword', 'iron_chainbody', 'iron_sq_shield'],
         ['steel_sword', 'steel_chainbody', 'steel_sq_shield'],
@@ -153,19 +147,8 @@ const GEAR: Record<string, string[][]> = {
         ['willow_shortbow', 'coif', 'studded_body', 'studded_chaps'],
         ['maple_shortbow', 'coif', 'studded_body', 'studded_chaps']
     ],
-    smith: [
-        ['hammer'],
-        ['steel_sword', 'steel_full_helm'],
-        ['mithril_sword', 'mithril_chainbody'],
-        ['steel_warhammer', 'steel_platelegs']
-    ],
-    mage: [
-        ['plainstaff'],
-        ['staff_of_air'],
-        ['staff_of_water'],
-        ['staff_of_fire'],
-        ['magic_staff']
-    ],
+    smith: [['hammer'], ['steel_sword', 'steel_full_helm'], ['mithril_sword', 'mithril_chainbody'], ['steel_warhammer', 'steel_platelegs']],
+    mage: [['plainstaff'], ['staff_of_air'], ['staff_of_water'], ['staff_of_fire'], ['magic_staff']],
     guard_hunter: [
         ['steel_sword', 'steel_platebody', 'steel_full_helm', 'steel_kiteshield'],
         ['mithril_sword', 'mithril_chainbody', 'mithril_full_helm', 'mithril_sq_shield'],
@@ -178,12 +161,7 @@ const GEAR: Record<string, string[][]> = {
         ['rune_sword', 'rune_chainbody', 'rune_platelegs'],
         ['mithril_sword', 'mithril_full_helm', 'mithril_kiteshield']
     ],
-    woodcutter: [
-        ['steel_axe'],
-        ['mithril_axe'],
-        ['adamant_axe'],
-        ['rune_axe']
-    ],
+    woodcutter: [['steel_axe'], ['mithril_axe'], ['adamant_axe'], ['rune_axe']],
     veteran: [
         ['rune_sword', 'rune_chainbody', 'rune_platelegs', 'rune_kiteshield'],
         ['rune_sword', 'rune_platebody', 'rune_full_helm', 'rune_platelegs'],
@@ -369,6 +347,7 @@ function defaultProfile(username: string, index: number): BotProfile {
 function createStartingBank(index: number, role: string): BotItemStore {
     const base = 12 + (index % 31);
     const commonSupplies: BotItemStore = {
+        coins: 2500 + index * 17,
         bronze_axe: 1,
         bronze_pickaxe: 1,
         net: 1,
