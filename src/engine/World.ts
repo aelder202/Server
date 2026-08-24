@@ -164,6 +164,8 @@ class World {
     readonly cycleStats: Uint16Array = new Uint16Array(12);
 
     tickRate: number = World.TICKRATE; // speeds up when we're processing server shutdown
+    infiniteShopStock: boolean = false;
+    multipliedThievingLoot: boolean = false;
     currentTick: number = 0; // the current tick of the game world.
     nextTick: number = 0; // the next time the game world should tick.
     shutdownTick: number = -1;

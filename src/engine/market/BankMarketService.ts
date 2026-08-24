@@ -25,6 +25,12 @@ type MarketQuote = {
     source: QuoteSource;
 };
 
+type InventorySuggestion = {
+    id: number;
+    name: string;
+    count: number;
+};
+
 type RemoteItem = {
     id: number;
     game_id: number;
@@ -80,6 +86,11 @@ class BankMarketService {
         }
 
         const action: string = args.shift() ?? 'search';
+        if (action === 'inventory') {
+            this.sendInventory(player);
+            return true;
+        }
+
         if (action === 'search') {
             void this.search(player, args.join(' '));
             return true;
@@ -110,6 +121,7 @@ class BankMarketService {
 
     open(player: Player): void {
         this.send(player, { type: 'open' });
+        this.sendInventory(player);
     }
 
     private async search(player: Player, rawQuery: string): Promise<void> {
@@ -132,9 +144,7 @@ class BankMarketService {
             }
 
             const settled: PromiseSettledResult<MarketQuote>[] = await Promise.allSettled(quoteTasks);
-            const results: MarketQuote[] = settled
-                .filter((result): result is PromiseFulfilledResult<MarketQuote> => result.status === 'fulfilled')
-                .map(result => result.value);
+            const results: MarketQuote[] = settled.filter((result): result is PromiseFulfilledResult<MarketQuote> => result.status === 'fulfilled').map(result => result.value);
             if (quoteTasks.length > 0 && results.length === 0) {
                 throw new Error('Lost City Markets did not return any usable prices');
             }
@@ -179,6 +189,7 @@ class BankMarketService {
         });
         const noted: string = deliveryType.id === type.id ? '' : ' (noted)';
         this.notice(player, true, `Bought ${added} x ${type.name}${noted} for ${total} coins.`);
+        this.sendInventory(player);
     }
 
     private async sell(player: Player, type: ObjType, requestedAmount: number): Promise<void> {
@@ -233,6 +244,7 @@ class BankMarketService {
             account_value: value
         });
         this.notice(player, true, `Sold ${removed} x ${type.name} for ${value} coins.`);
+        this.sendInventory(player);
     }
 
     private async quoteForType(type: ObjType): Promise<MarketQuote> {
@@ -267,9 +279,7 @@ class BankMarketService {
             const listings: RemoteListing[] = await this.fetchSoldListings(remote.slug);
             const prices: number[] = this.cleanSalePrices(listings);
             const usesSales: boolean = prices.length >= MIN_MARKET_TRADES;
-            const marketPrice: number = usesSales
-                ? Math.round(prices.reduce((sum, price) => sum + price, 0) / prices.length)
-                : remote.cost;
+            const marketPrice: number = usesSales ? Math.round(prices.reduce((sum, price) => sum + price, 0) / prices.length) : remote.cost;
             const price: number = Math.max(1, Math.min(MAX_TRANSACTION_VALUE, marketPrice));
             const stored: StoredQuote = {
                 id: type.id,
@@ -309,8 +319,9 @@ class BankMarketService {
                 return false;
             }
             const candidate: Partial<RemoteItem> = item;
-            return Number.isSafeInteger(candidate.id) && Number.isSafeInteger(candidate.game_id) && typeof candidate.name === 'string' &&
-                typeof candidate.slug === 'string' && Number.isSafeInteger(candidate.cost) && typeof candidate.isSet === 'boolean';
+            return (
+                Number.isSafeInteger(candidate.id) && Number.isSafeInteger(candidate.game_id) && typeof candidate.name === 'string' && typeof candidate.slug === 'string' && Number.isSafeInteger(candidate.cost) && typeof candidate.isSet === 'boolean'
+            );
         });
     }
 
@@ -322,14 +333,7 @@ class BankMarketService {
             throw new Error('Lost City Markets item page did not contain price data');
         }
 
-        const encoded: string = match[1]
-            .replaceAll('&quot;', '"')
-            .replaceAll('&#039;', "'")
-            .replaceAll('&#39;', "'")
-            .replaceAll('&apos;', "'")
-            .replaceAll('&lt;', '<')
-            .replaceAll('&gt;', '>')
-            .replaceAll('&amp;', '&');
+        const encoded: string = match[1].replaceAll('&quot;', '"').replaceAll('&#039;', "'").replaceAll('&#39;', "'").replaceAll('&apos;', "'").replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&amp;', '&');
         const page: unknown = JSON.parse(encoded);
         if (!page || typeof page !== 'object') {
             throw new Error('Unexpected Lost City Markets item page');
@@ -416,6 +420,46 @@ class BankMarketService {
             return null;
         }
         return noted;
+    }
+
+    private inventorySuggestions(player: Player): InventorySuggestion[] {
+        const inventory = player.getInventory(InvType.INV);
+        if (!inventory) {
+            return [];
+        }
+
+        const suggestions: Map<number, InventorySuggestion> = new Map();
+        for (const item of inventory.itemsFiltered) {
+            let type: ObjType = ObjType.get(item.id);
+            if (type.certtemplate !== -1 && type.certlink >= 0 && type.certlink < ObjType.count) {
+                type = ObjType.get(type.certlink);
+            }
+
+            const tradeable: ObjType | null = this.getTradeableItem(type.id);
+            if (!tradeable) {
+                continue;
+            }
+
+            const existing: InventorySuggestion | undefined = suggestions.get(tradeable.id);
+            if (existing) {
+                existing.count += item.count;
+            } else {
+                suggestions.set(tradeable.id, {
+                    id: tradeable.id,
+                    name: tradeable.name!,
+                    count: item.count
+                });
+            }
+        }
+        return [...suggestions.values()];
+    }
+
+    private sendInventory(player: Player): void {
+        this.send(player, { type: 'inventory-clear' });
+        for (const item of this.inventorySuggestions(player)) {
+            this.send(player, { type: 'inventory-item', ...item });
+        }
+        this.send(player, { type: 'inventory-done' });
     }
 
     private load(): void {

@@ -14,6 +14,9 @@ import { CommandHandlers } from '#/engine/script/ScriptRunner.js';
 import { CategoryTypeValid, check, CoordValid, DurationValid, InvTypeValid, NumberNotNull, ObjStackValid, ObjTypeValid } from '#/engine/script/ScriptValidators.js';
 import World from '#/engine/World.js';
 import { WealthEventType } from '#/server/logger/WealthEventType.js';
+import Environment from '#/util/Environment.js';
+
+const MULTIPLIED_THIEVING_REWARD_SCRIPTS: Set<string> = new Set(['[proc,pick_pocket_check_for_reward]', '[proc,stealing_check_for_reward]', '[proc,trapped_chest_check_for_reward]']);
 
 const InvOps: CommandHandlers = {
     // inv config
@@ -70,7 +73,8 @@ const InvOps: CommandHandlers = {
         }
 
         const player = state.activePlayer;
-        const overflow = count - player.invAdd(invType.id, objType.id, count);
+        const rewardCount: number = World.multipliedThievingLoot && MULTIPLIED_THIEVING_REWARD_SCRIPTS.has(state.script.name) ? Math.min(Inventory.STACK_LIMIT, count * Environment.node.xpRate) : count;
+        const overflow = rewardCount - player.invAdd(invType.id, objType.id, rewardCount);
         if (overflow > 0) {
             if (!objType.stackable || overflow === 1) {
                 for (let i = 0; i < overflow; i++) {
@@ -581,7 +585,8 @@ const InvOps: CommandHandlers = {
         }
 
         const player: Player = state.activePlayer;
-        const completed = player.invDel(fromInvType.id, objType.id, count);
+        const infiniteShopSource: boolean = World.infiniteShopStock && fromInvType.scope === InvType.SCOPE_SHARED && fromInvType.restock;
+        const completed: number = infiniteShopSource ? Math.min(count, player.invTotal(fromInvType.id, objType.id)) : player.invDel(fromInvType.id, objType.id, count);
         if (completed == 0) {
             return;
         }

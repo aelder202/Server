@@ -263,6 +263,30 @@ export default class ClientCheatHandler extends ClientGameMessageHandler<ClientC
 
                 Environment.node.xpRate = rate;
                 World.broadcastMes(`XP rate has been changed to ${rate}x.`);
+            } else if (cmd === 'infstock') {
+                if (args.length === 0 || args[0] === 'status') {
+                    player.messageGame(`Infinite shop stock is ${World.infiniteShopStock ? 'enabled' : 'disabled'}. Usage: ::infstock [on|off|status]`);
+                    return true;
+                }
+                if (args.length !== 1 || (args[0] !== 'on' && args[0] !== 'off')) {
+                    player.messageGame('Usage: ::infstock [on|off|status]');
+                    return false;
+                }
+
+                World.infiniteShopStock = args[0] === 'on';
+                World.broadcastMes(`Infinite shop stock has been ${World.infiniteShopStock ? 'enabled' : 'disabled'}.`);
+            } else if (cmd === 'thievloot') {
+                if (args.length === 0 || args[0] === 'status') {
+                    player.messageGame(`Multiplied thieving loot is ${World.multipliedThievingLoot ? 'enabled' : 'disabled'} (${Environment.node.xpRate}x). Usage: ::thievloot [on|off|status]`);
+                    return true;
+                }
+                if (args.length !== 1 || (args[0] !== 'on' && args[0] !== 'off')) {
+                    player.messageGame('Usage: ::thievloot [on|off|status]');
+                    return false;
+                }
+
+                World.multipliedThievingLoot = args[0] === 'on';
+                World.broadcastMes(`Multiplied thieving loot has been ${World.multipliedThievingLoot ? 'enabled' : 'disabled'} (${Environment.node.xpRate}x).`);
             } else if (cmd === 'life' || cmd === 'livingworld') {
                 if (args.length === 0 || args[0] === 'status') {
                     player.messageGame(World.lifeDirector.getStatus());
