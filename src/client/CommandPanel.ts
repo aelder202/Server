@@ -2,6 +2,7 @@ import type { PluginSummary } from '#/plugins/PluginApi.js';
 
 export interface CommandPanelHost {
     listPlugins(): PluginSummary[];
+    getStaffLevel(): number;
     runCommand(input: string): Promise<boolean>;
 }
 
@@ -105,29 +106,28 @@ const DEBUG_SCRIPT_COMMANDS: CommandButton[] = DEBUG_SCRIPT_NAMES.map(name => ({
     tags: ['staff 4', 'dev', 'debugproc']
 }));
 
-type CommandTab = 'common' | 'teleport' | 'plugins' | 'staff' | 'debug';
+type CommandTab = 'players' | 'plugins' | 'staff';
 
 const COMMAND_TABS: { id: CommandTab; label: string }[] = [
-    { id: 'common', label: 'Common' },
-    { id: 'teleport', label: 'Teleports' },
+    { id: 'players', label: 'Players' },
     { id: 'plugins', label: 'Plugins' },
-    { id: 'staff', label: 'Staff' },
-    { id: 'debug', label: 'Debug' }
+    { id: 'staff', label: 'Staff' }
 ];
 
-const COMMON_TELEPORTS: Set<string> = new Set(['home', 'lumbridge', 'varrock', 'falador', 'draynor', 'portsarim', 'alkharid']);
 const SERVER_TELEPORT_COMMANDS: CommandButton[] = SERVER_COMMANDS.filter(item => item.command === '::teles' || item.command.startsWith('::tele') || item.command.startsWith('::tp '));
 const TELEPORT_COMMANDS: CommandButton[] = [...SERVER_TELEPORT_COMMANDS, ...TELEPORT_FAVORITES];
-const STAFF_COMMANDS: CommandButton[] = [
+const PLAYER_COMMANDS: CommandButton[] = [
+    ...CLIENT_COMMANDS.filter(item => !hasStaffTag(item)),
+    ...TELEPORT_FAVORITES.filter(item => ['home', 'lumby', 'lumbridge'].includes(item.label)).map(item => ({ ...item, tags: ['player', 'teleport'] }))
+];
+const MODERATION_COMMANDS: CommandButton[] = SERVER_COMMANDS.filter(item => ['::teleto', '::teleother', '::setvis', '::ban', '::mute', '::kick'].some(command => item.command.startsWith(command)));
+const ADMIN_COMMANDS: CommandButton[] = SERVER_COMMANDS.filter(item => requiredStaffLevel(item) === 3 && !MODERATION_COMMANDS.includes(item));
+const STAFF_UTILITY_COMMANDS: CommandButton[] = [
     ...CLIENT_COMMANDS.filter(hasStaffTag),
-    ...SERVER_COMMANDS.filter(item => !SERVER_TELEPORT_COMMANDS.includes(item))
+    ...SERVER_COMMANDS.filter(item => requiredStaffLevel(item) === 2 && !SERVER_TELEPORT_COMMANDS.includes(item) && !MODERATION_COMMANDS.includes(item))
 ];
-const COMMON_COMMANDS: CommandButton[] = [
-    ...CLIENT_COMMANDS.filter(item => ['::plugins', '::fpson', '::fpsoff', '::fps <target>', '::pickpocket on', '::pickpocket off', '::shopbuy 1', '::shopbuy 5', '::shopbuy 10'].includes(item.command) || item.command.startsWith(`::plugin ${WASD_CAMERA_PLUGIN_ID}`)),
-    ...SERVER_COMMANDS.filter(item => ['::getcoord', '::teles', '::telefav <name>', '::tele <level,mapX,mapZ[,tileX,tileZ]>'].includes(item.command)),
-    ...TELEPORT_FAVORITES.filter(item => COMMON_TELEPORTS.has(item.label))
-];
-const SEARCH_COMMANDS: CommandButton[] = [...CLIENT_COMMANDS, ...SERVER_COMMANDS, ...TELEPORT_FAVORITES, ...DEBUG_SCRIPT_COMMANDS];
+const DEVELOPER_COMMANDS: CommandButton[] = SERVER_COMMANDS.filter(item => requiredStaffLevel(item) >= 4);
+const STAFF_SEARCH_COMMANDS: CommandButton[] = [...TELEPORT_COMMANDS, ...MODERATION_COMMANDS, ...STAFF_UTILITY_COMMANDS, ...ADMIN_COMMANDS, ...DEVELOPER_COMMANDS, ...DEBUG_SCRIPT_COMMANDS];
 
 export function installCommandPanel(host: CommandPanelHost): void {
     if (document.getElementById('lostcity-command-panel')) {
@@ -242,7 +242,7 @@ export function installCommandPanel(host: CommandPanelHost): void {
     tabs.className = 'lostcity-command-panel-tabs';
     tabs.setAttribute('role', 'tablist');
 
-    let activeTab: CommandTab = 'common';
+    let activeTab: CommandTab = 'players';
     const tabButtons: { id: CommandTab; button: HTMLButtonElement }[] = COMMAND_TABS.map(tab => {
         const button = document.createElement('button');
         button.type = 'button';
@@ -353,7 +353,12 @@ export function installCommandPanel(host: CommandPanelHost): void {
 
     const render = (): void => {
         const query: string = search.value.trim().toLowerCase();
+        const isStaff = host.getStaffLevel() > 0;
+        if (!isStaff && activeTab === 'staff') {
+            activeTab = 'players';
+        }
         for (const tab of tabButtons) {
+            tab.button.hidden = tab.id === 'staff' && !isStaff;
             const selected = tab.id === activeTab;
             tab.button.classList.toggle('active', selected);
             tab.button.setAttribute('aria-selected', selected ? 'true' : 'false');
@@ -363,20 +368,22 @@ export function installCommandPanel(host: CommandPanelHost): void {
         let visible = 0;
 
         if (query) {
-            visible += renderCommandSection('Command matches', SEARCH_COMMANDS, query);
+            visible += renderCommandSection('Player command matches', PLAYER_COMMANDS, query);
+            if (isStaff) {
+                visible += renderCommandSection('Staff command matches', STAFF_SEARCH_COMMANDS, query);
+            }
             visible += renderPluginSection(query);
-        } else if (activeTab === 'common') {
-            visible += renderCommandSection('Common commands', COMMON_COMMANDS, query);
-            visible += renderPluginSection(query);
-        } else if (activeTab === 'teleport') {
-            visible += renderCommandSection('Teleport commands', TELEPORT_COMMANDS, query);
+        } else if (activeTab === 'players') {
+            visible += renderCommandSection('Player commands', PLAYER_COMMANDS, query);
         } else if (activeTab === 'plugins') {
             visible += renderCommandSection('Plugin commands', CLIENT_COMMANDS.filter(item => item.command === '::plugins'), query);
             visible += renderPluginSection(query);
-        } else if (activeTab === 'staff') {
-            visible += renderCommandSection('Staff commands', STAFF_COMMANDS, query);
-        } else if (activeTab === 'debug') {
-            visible += renderCommandSection('Debug script commands', DEBUG_SCRIPT_COMMANDS, query);
+        } else if (activeTab === 'staff' && isStaff) {
+            visible += renderCommandSection('Teleports', TELEPORT_COMMANDS, query);
+            visible += renderCommandSection('Moderation', MODERATION_COMMANDS, query);
+            visible += renderCommandSection('Staff utilities', STAFF_UTILITY_COMMANDS, query);
+            visible += renderCommandSection('Admin', ADMIN_COMMANDS, query);
+            visible += renderCommandSection('Developer and debug', [...DEVELOPER_COMMANDS, ...DEBUG_SCRIPT_COMMANDS], query);
         }
 
         if (visible === 0) {
@@ -430,6 +437,16 @@ export function installCommandPanel(host: CommandPanelHost): void {
 
 function hasStaffTag(item: CommandButton): boolean {
     return (item.tags ?? []).some(tag => tag.startsWith('staff'));
+}
+
+function requiredStaffLevel(item: CommandButton): number {
+    for (const tag of item.tags ?? []) {
+        const match = /^staff (\d+)$/.exec(tag);
+        if (match) {
+            return Number.parseInt(match[1], 10);
+        }
+    }
+    return 0;
 }
 
 function createSection(titleText: string, count: number): { root: HTMLElement; list: HTMLElement } {

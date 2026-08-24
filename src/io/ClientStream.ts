@@ -25,7 +25,7 @@ export default class ClientStream {
         socket.onclose = this.onclose;
         socket.onerror = this.onerror;
         this.wsin = new WebSocketReader(socket, 30000);
-        this.wsout = new WebSocketWriter(socket, 5000);
+        this.wsout = new WebSocketWriter(socket, 64 * 1024);
         this.socket = socket;
     }
 

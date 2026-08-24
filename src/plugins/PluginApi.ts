@@ -60,6 +60,7 @@ export interface PluginClient {
     clearCameraInput(): void;
     adjustExtendedCameraZoom(deltaY: number): void;
     resetCameraZoom(): void;
+    setRemoveRoofsEnabled(enabled: boolean): void;
     sendPluginServerCommand(command: string): void;
 }
 
@@ -112,6 +113,10 @@ export class ClientPluginContext {
 
     resetCameraZoom(): void {
         this.client.resetCameraZoom();
+    }
+
+    setRemoveRoofsEnabled(enabled: boolean): void {
+        this.client.setRemoveRoofsEnabled(enabled);
     }
 
     sendServerCommand(command: string): void {

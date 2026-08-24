@@ -180,7 +180,7 @@ export class MapView extends GameShell {
     ];
 
     constructor() {
-        super();
+        super(true);
 
         this.run();
     }

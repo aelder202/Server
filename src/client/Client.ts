@@ -4,6 +4,7 @@ import { stopMidi, setMidiVolume, playMidi } from '#3rdparty/tinymidipcm.js';
 import ClientBuild from '#/client/ClientBuild.js';
 import { ClientCode } from '#/client/ClientCode.js';
 import { installCommandPanel } from '#/client/CommandPanel.js';
+import { installWorldMapPanel } from '#/client/WorldMapPanel.js';
 import GameShell from '#/client/GameShell.js';
 import { MiniMenuAction } from '#/client/MiniMenuAction.js';
 import MobileKeyboard from '#/client/MobileKeyboard.js';
@@ -488,6 +489,7 @@ export class Client extends GameShell {
     private runenergy: number = 0;
     private runweight: number = 0;
     private staffmodlevel: number = 0;
+    private removeRoofs: boolean = false;
     private var: number[] = [];
     private varServ: number[] = [];
 
@@ -603,8 +605,10 @@ export class Client extends GameShell {
         this.pluginManager.startAll();
         installCommandPanel({
             listPlugins: () => this.pluginManager.summaries(),
+            getStaffLevel: () => this.staffmodlevel,
             runCommand: input => this.runCommandPanelCommand(input)
         });
+        installWorldMapPanel();
 
         this.run();
     }
@@ -715,6 +719,10 @@ export class Client extends GameShell {
 
     resetCameraZoom(): void {
         this.orbitCameraZoom = 0;
+    }
+
+    setRemoveRoofsEnabled(enabled: boolean): void {
+        this.removeRoofs = enabled;
     }
 
     sendPluginServerCommand(command: string): void {
@@ -2335,7 +2343,7 @@ export class Client extends GameShell {
         this.locChangeDoQueue();
         await this.soundsDoQueue();
 
-        if (now - this.timeoutTimer > 15_000) {
+        if (now - this.timeoutTimer > 45_000) {
             // no packets received recently, connection lost
             await this.lostCon();
         }
@@ -4539,7 +4547,9 @@ export class Client extends GameShell {
         }
 
         let level: number;
-        if (this.cinemaCam) {
+        if (this.removeRoofs) {
+            level = this.minusedlevel;
+        } else if (this.cinemaCam) {
             level = this.roofCheck2();
         } else {
             level = this.roofCheck();
